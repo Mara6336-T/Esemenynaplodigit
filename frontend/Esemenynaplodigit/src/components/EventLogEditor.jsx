@@ -32,6 +32,22 @@ const ACTION_OPTIONS = [
   "Tűzoltóság értesítése",
 ];
 
+/* ============================================================
+   SEGÉDFÜGGVÉNYEK
+   ============================================================ */
+
+const getNow = () => {
+  const now = new Date();
+
+  return {
+    iso: now.toISOString(),
+    time: now.toLocaleTimeString("hu-HU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
+};
+
 const createEmptyEvent = (events) => {
   const maxSequenceNumber = events.reduce(
     (max, event) =>
@@ -49,29 +65,30 @@ const createEmptyEvent = (events) => {
         ? crypto.randomUUID()
         : Date.now(),
 
-    sequenceNumber:
-      maxSequenceNumber + 1,
+    sequenceNumber: maxSequenceNumber + 1,
 
     eventType: "",
     time: "",
+
     reporterName: "",
     reporterMode: "",
+
     eventDescription: "",
-    decisionMaker: CURRENT_USER,
-    decisionMakerMode: "current_user",
+
+    decisionMaker: "",
+    decisionMakerMode: "",
+
     actionResult: "",
+
     createdAt: "",
     lastModifiedAt: "",
     createdBy: "",
   };
 };
 
-
-/*
- * ============================================================
- * AUTOMATIKUSAN NÖVEKVŐ TEXTAREA
- * ============================================================
- */
+/* ============================================================
+   AUTOMATIKUSAN NÖVEKVŐ TEXTAREA
+   ============================================================ */
 
 function AutoResizeTextarea({
   value,
@@ -133,1730 +150,10 @@ function AutoResizeTextarea({
   );
 }
 
+/* ============================================================
+   PERSON SELECTOR
+   ============================================================ */
 
-/*
- * ============================================================
- * FŐ KOMPONENS
- * ============================================================
- */
-
-function EventLogEditor({
-  match,
-  onBack,
-}) {
-  const [status, setStatus] = useState(
-    match.status
-  );
-
-  /*
-   * ----------------------------------------------------------
-   * DOKUMENTUM FEJLÉC
-   * ----------------------------------------------------------
-   */
-
-  const [meta, setMeta] = useState(() => ({
-    ...eventMeta,
-
-    securityOfficer: {
-      ...(eventMeta.securityOfficer || {}),
-    },
-
-    headOrganizer: {
-      ...(eventMeta.headOrganizer || {}),
-    },
-
-    medicalService: {
-      ...(eventMeta.medicalService || {}),
-    },
-
-    disasterProtection: {
-      ...(eventMeta.disasterProtection || {}),
-    },
-  }));
-
-
-  /*
-   * ----------------------------------------------------------
-   * ESEMÉNYEK
-   * ----------------------------------------------------------
-   */
-
-  const [events, setEvents] = useState(() =>
-    (eventRows || []).map((event) => ({
-      ...event,
-    }))
-  );
-
-
-  /*
-   * ----------------------------------------------------------
-   * MEGJEGYZÉSEK
-   * ----------------------------------------------------------
-   */
-
-  const [notes, setNotes] = useState([
-    {
-      id: 1,
-      text: "Teszt megjegyzés.",
-      createdAt: "2026-03-10 09:15",
-      createdBy: "Teszt Elek",
-    },
-  ]);
-
-  const [newNote, setNewNote] = useState("");
-
-
-  /*
-   * ----------------------------------------------------------
-   * STÁTUSZOK
-   * ----------------------------------------------------------
-   */
-
-  const isEditable =
-    status === "in_progress";
-
-  const isFinalized =
-    status === "finalized";
-
-  const isArchived =
-    status === "archived";
-
-
-  /*
-   * ==========================================================
-   * META MÓDOSÍTÁS
-   * ==========================================================
-   */
-
-  const updateMeta = (
-    field,
-    value
-  ) => {
-    if (!isEditable) return;
-
-    setMeta((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
-  };
-
-
-  const updateNestedMeta = (
-    parent,
-    field,
-    value
-  ) => {
-    if (!isEditable) return;
-
-    setMeta((previous) => ({
-      ...previous,
-
-      [parent]: {
-        ...(previous[parent] || {}),
-        [field]: value,
-      },
-    }));
-  };
-
-
-  /*
-   * ==========================================================
-   * ESEMÉNY HOZZÁADÁSA
-   * ==========================================================
-   */
-
-  const addEvent = () => {
-    if (!isEditable) return;
-
-    setEvents((previous) => [
-      ...previous,
-      createEmptyEvent(previous),
-    ]);
-  };
-
-
-  /*
-   * ==========================================================
-   * ESEMÉNY MÓDOSÍTÁSA
-   * ==========================================================
-   */
-
-  const updateEvent = (
-    index,
-    field,
-    value
-  ) => {
-    if (!isEditable) return;
-
-    setEvents((previous) =>
-      previous.map((event, currentIndex) => {
-        if (currentIndex !== index) {
-          return event;
-        }
-
-        const updatedEvent = {
-          ...event,
-          [field]: value,
-        };
-
-        /*
-         * Az esemény akkor válik ténylegesen
-         * aktívvá, amikor valamelyik érdemi mezőbe
-         * adat kerül.
-         */
-        const hasEventData =
-          Boolean(
-            updatedEvent.eventType?.trim()
-          ) ||
-          Boolean(
-            updatedEvent.eventDescription?.trim()
-          ) ||
-          Boolean(
-            updatedEvent.decisionMaker?.trim()
-          ) ||
-          Boolean(
-            updatedEvent.actionResult?.trim()
-          );
-
-        /*
-         * Első tényleges adatbevitel.
-         */
-        if (
-          !event.time &&
-          hasEventData
-        ) {
-          const now = new Date();
-          const isoNow =
-            now.toISOString();
-
-          updatedEvent.time =
-            now.toLocaleTimeString(
-              "hu-HU",
-              {
-                hour: "2-digit",
-                minute: "2-digit",
-              }
-            );
-
-          // A kitöltő alapértelmezésben a jelenlegi felhasználó.
-          // Manuális módban a korábban megadott személy marad.
-          if (updatedEvent.reporterMode !== "custom") {
-            updatedEvent.reporterName =
-              CURRENT_USER;
-            updatedEvent.reporterMode =
-              "current_user";
-          }
-
-          // Alapértelmezésben az intézkedést a bejelentkezett
-          // felhasználó határozza meg. A manuális mód ettől eltérhet.
-          if (updatedEvent.decisionMakerMode !== "custom") {
-            updatedEvent.decisionMaker = CURRENT_USER;
-            updatedEvent.decisionMakerMode = "current_user";
-          }
-
-          updatedEvent.createdBy =
-            CURRENT_USER;
-
-          updatedEvent.createdAt =
-            isoNow;
-
-          updatedEvent.lastModifiedAt =
-            isoNow;
-        }
-
-        /*
-         * Már létező esemény módosítása.
-         */
-        else if (event.time) {
-          updatedEvent.lastModifiedAt =
-            new Date().toISOString();
-        }
-
-        return updatedEvent;
-      })
-    );
-  };
-
-
-  /*
-   * ==========================================================
-   * ESEMÉNY TÖRLÉSE
-   * ==========================================================
-   */
-
-  const deleteEvent = (index) => {
-    if (!isEditable) return;
-
-    setEvents((previous) =>
-      previous.filter(
-        (_, currentIndex) =>
-          currentIndex !== index
-      )
-    );
-  };
-
-
-  /*
-   * ==========================================================
-   * MEGJEGYZÉS
-   * ==========================================================
-   */
-
-  const addNote = () => {
-    if (isArchived) return;
-
-    const text = newNote.trim();
-
-    if (!text) return;
-
-    setNotes((previous) => [
-      ...previous,
-
-      {
-        id: Date.now(),
-        text,
-        createdAt:
-          new Date().toLocaleString(
-            "hu-HU"
-          ),
-        createdBy: CURRENT_USER,
-      },
-    ]);
-
-    setNewNote("");
-  };
-
-
-  /*
-   * ==========================================================
-   * MENTÉS
-   * ==========================================================
-   */
-
-  const handleSave = () => {
-    if (!isEditable) return;
-
-    const data = {
-      meta,
-      events,
-      status,
-    };
-
-    console.log(
-      "Eseménynapló mentve:",
-      data
-    );
-
-    /*
-     * API később:
-     *
-     * await updateEventLog(match.id, data);
-     */
-  };
-
-
-  /*
-   * ==========================================================
-   * FINALIZÁLÁS
-   * ==========================================================
-   */
-
-  const handleFinalize = () => {
-    if (!isEditable) return;
-
-    const data = {
-      meta,
-      events,
-      status: "finalized",
-    };
-
-    console.log(
-      "Eseménynapló finalizálva:",
-      data
-    );
-
-    /*
-     * API később:
-     *
-     * await finalizeEventLog(match.id, data);
-     */
-
-    setStatus("finalized");
-  };
-
-
-  /*
-   * ==========================================================
-   * FEJLÉC MEZŐ
-   * ==========================================================
-   */
-
-  const HeaderField = ({
-    label,
-    children,
-    first = false,
-  }) => (
-    <div
-      className={`
-        flex
-        min-h-[38px]
-        items-center
-        border-b
-        border-[#edf0f4]
-        py-[6px]
-        last:border-b-0
-      `}
-    >
-      <span
-        className={`
-          mr-2
-          shrink-0
-          whitespace-nowrap
-          font-semibold
-          text-[#2E7D32]
-          ${first
-            ? "text-[14px]"
-            : "text-[13px]"
-          }
-        `}
-      >
-        {label}
-      </span>
-
-      {children}
-    </div>
-  );
-
-
-  /*
-   * ==========================================================
-   * FEJLÉC INPUT
-   * ==========================================================
-   */
-
-  const headerInputClass = `
-    min-w-0
-    w-full
-    rounded-[5px]
-    border-0
-    bg-transparent
-    px-[6px]
-    py-1
-    text-[14px]
-    leading-[1.4]
-    text-gray-900
-    outline-none
-    transition
-    duration-150
-    hover:bg-[#f6f8fb]
-    focus:bg-[#f6f8fb]
-    focus:shadow-[inset_0_0_0_1px_#b9c4d5]
-  `;
-
-
-  /*
-   * ==========================================================
-   * FINALIZED / ARCHIVED
-   * ==========================================================
-   */
-
-  if (
-    isFinalized ||
-    isArchived
-  ) {
-    return (
-      <div
-        className="
-          mx-auto
-          w-full
-          max-w-[1600px]
-          p-6
-          text-gray-800
-          max-[800px]:p-3
-        "
-      >
-
-        {/* ---------------------------------------------------
-            STÁTUSZ / FEJLÉC
-        --------------------------------------------------- */}
-
-        <div
-          className="
-            relative
-            mb-6
-            rounded-xl
-            border
-            border-[#d9dee7]
-            bg-white
-            px-6
-            py-[22px]
-            shadow-[0_2px_6px_rgba(0,0,0,0.04)]
-            max-[800px]:p-4
-          "
-        >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-              gap-4
-            "
-          >
-
-            <div className="min-w-0">
-
-              <h2
-                className="
-                  text-2xl
-                  font-bold
-                  text-gray-900
-                "
-              >
-                {match.title}
-              </h2>
-
-              <p
-                className="
-                  mt-1
-                  text-sm
-                  text-gray-500
-                "
-              >
-                {match.date} {match.time}
-              </p>
-
-            </div>
-
-            <span
-              className={`
-                shrink-0
-                rounded-full
-                px-3
-                py-1.5
-                text-xs
-                font-bold
-                ${
-                  isFinalized
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-gray-100 text-gray-600"
-                }
-              `}
-            >
-              {isFinalized
-                ? "Lezárt"
-                : "Archivált"}
-            </span>
-
-          </div>
-
-        </div>
-
-
-        {/* ---------------------------------------------------
-            DOKUMENTUM
-        --------------------------------------------------- */}
-
-        <div
-          className="
-            rounded-[10px]
-            border
-            border-[#d9dee7]
-            bg-white
-            p-5
-            shadow-[0_2px_5px_rgba(0,0,0,0.03)]
-          "
-        >
-
-          <EventLogDocument
-            meta={meta}
-            rows={events}
-          />
-
-        </div>
-
-
-        {/* ---------------------------------------------------
-            MEGJEGYZÉSEK
-        --------------------------------------------------- */}
-
-        <div
-          className="
-            mt-6
-            rounded-[10px]
-            border
-            border-[#d9dee7]
-            bg-white
-            p-5
-          "
-        >
-
-          <h3
-            className="
-              mb-[14px]
-              text-base
-              font-bold
-              text-gray-800
-            "
-          >
-            Megjegyzések
-          </h3>
-
-
-          {notes.length === 0 ? (
-            <p
-              className="
-                text-[13px]
-                text-[#8a94a3]
-              "
-            >
-              Nincs megjegyzés.
-            </p>
-          ) : (
-            <div
-              className="
-                flex
-                flex-col
-                gap-2
-              "
-            >
-
-              {notes.map((note) => (
-                <div
-                  key={note.id}
-                  className="
-                    rounded-[7px]
-                    border
-                    border-[#e1e5eb]
-                    bg-[#fafbfc]
-                    px-3
-                    py-[10px]
-                  "
-                >
-
-                  <p
-                    className="
-                      whitespace-pre-wrap
-                      text-[13px]
-                      leading-[1.5]
-                      text-gray-800
-                    "
-                  >
-                    {note.text}
-                  </p>
-
-                  <div
-                    className="
-                      mt-1.5
-                      text-[11px]
-                      text-[#8a94a3]
-                    "
-                  >
-                    {note.createdBy}
-                    {" – "}
-                    {note.createdAt}
-                  </div>
-
-                </div>
-              ))}
-
-            </div>
-          )}
-
-
-          {/* Finalized állapotban még írható megjegyzés */}
-          {isFinalized && (
-            <div
-              className="
-                mt-[14px]
-                flex
-                flex-col
-                gap-2
-              "
-            >
-
-              <textarea
-                value={newNote}
-                onChange={(event) =>
-                  setNewNote(
-                    event.target.value
-                  )
-                }
-                placeholder="Új megjegyzés..."
-                rows={3}
-                className="
-                  min-h-[70px]
-                  w-full
-                  resize-y
-                  rounded-[7px]
-                  border
-                  border-[#cfd6e0]
-                  px-[10px]
-                  py-[9px]
-                  text-[13px]
-                  outline-none
-                  transition
-                  focus:border-[#9eabbc]
-                "
-              />
-
-              <button
-                type="button"
-                onClick={addNote}
-                disabled={!newNote.trim()}
-                className="
-                  self-end
-                  min-h-9
-                  rounded-[7px]
-                  border
-                  border-[#2E7D32]
-                  bg-[#2E7D32]
-                  px-4
-                  py-2
-                  text-[13px]
-                  font-semibold
-                  text-white
-                  transition
-                  hover:bg-[#256628]
-                  disabled:cursor-not-allowed
-                  disabled:opacity-40
-                "
-              >
-                Megjegyzés hozzáadása
-              </button>
-
-            </div>
-          )}
-
-        </div>
-
-
-        {/* ---------------------------------------------------
-            VISSZA
-        --------------------------------------------------- */}
-
-        <button
-          type="button"
-          onClick={onBack}
-          className="
-            mt-6
-            rounded-[7px]
-            border
-            border-gray-300
-            bg-white
-            px-4
-            py-2
-            text-[13px]
-            font-semibold
-            text-gray-700
-            transition
-            hover:bg-gray-50
-          "
-        >
-          Vissza
-        </button>
-
-      </div>
-    );
-  }
-
-
-  /*
-   * ==========================================================
-   * IN PROGRESS
-   * ==========================================================
-   */
-
-  return (
-    <div
-      className="
-        mx-auto
-        w-full
-        max-w-[1600px]
-        p-6
-        font-sans
-        text-gray-800
-        max-[800px]:p-3
-      "
-    >
-
-      {/* ======================================================
-          STÁTUSZ
-      ====================================================== */}
-
-      <div
-        className="
-          mb-4
-          flex
-          items-center
-          gap-2
-          rounded-lg
-          border
-          border-[#C19A5B]
-          bg-[#f8fafc]
-          px-[14px]
-          py-[10px]
-          text-[13px]
-        "
-      >
-
-        <strong className="font-bold">
-          Állapot:
-        </strong>
-
-        <span className="text-[#596579]">
-          Megnyitott
-        </span>
-
-      </div>
-
-
-      {/* ======================================================
-          DOKUMENTUM FEJLÉC
-      ====================================================== */}
-
-      <section
-        className="
-          relative
-          mb-6
-          rounded-xl
-          border
-          border-[#C19A5B]
-          bg-white
-          px-6
-          py-[22px]
-          shadow-[0_2px_6px_rgba(0,0,0,0.04)]
-          max-[800px]:p-4
-        "
-      >
-
-        <div
-          className="
-            grid
-            grid-cols-2
-            gap-x-[42px]
-            gap-y-1
-            pr-[170px]
-            max-[1100px]:gap-x-6
-            max-[1100px]:pr-[140px]
-            max-[800px]:grid-cols-2
-            max-[800px]:gap-x-4
-            max-[800px]:px-0
-            max-[800px]:pt-[72px]
-          "
-        >
-
-          {/* BAL OSZLOP */}
-          <div className="flex min-w-0 flex-col">
-
-            <HeaderField
-              label="Meccs megnevezése"
-              first
-            >
-              <input
-                type="text"
-                value={
-                  meta.competitionName || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "competitionName",
-                    event.target.value
-                  )
-                }
-                className={`
-                  ${headerInputClass}
-                  text-[18px]
-                  font-bold
-                `}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Hazai csapat">
-              <input
-                type="text"
-                value={
-                  meta.homeTeam || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "homeTeam",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Vendég csapat">
-              <input
-                type="text"
-                value={
-                  meta.awayTeam || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "awayTeam",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Mérkőzés dátuma">
-              <input
-                type="text"
-                value={
-                  meta.matchDate || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "matchDate",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Mérkőzés időpontja">
-              <input
-                type="text"
-                value={
-                  meta.matchTime || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "matchTime",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Szervező">
-              <input
-                type="text"
-                value={
-                  meta.organizer || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "organizer",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-          </div>
-
-
-          {/* JOBB OSZLOP */}
-          <div className="flex min-w-0 flex-col">
-
-            <HeaderField label="Biztonsági vezető">
-              <input
-                type="text"
-                value={
-                  meta.securityOfficer?.name ||
-                  ""
-                }
-                onChange={(event) =>
-                  updateNestedMeta(
-                    "securityOfficer",
-                    "name",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Biztonsági vezető telefonszáma">
-              <input
-                type="text"
-                value={
-                  meta.securityOfficer?.phone ||
-                  ""
-                }
-                onChange={(event) =>
-                  updateNestedMeta(
-                    "securityOfficer",
-                    "phone",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Főszervező">
-              <input
-                type="text"
-                value={
-                  meta.headOrganizer?.name ||
-                  ""
-                }
-                onChange={(event) =>
-                  updateNestedMeta(
-                    "headOrganizer",
-                    "name",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Főszervező telefonszáma">
-              <input
-                type="text"
-                value={
-                  meta.headOrganizer?.phone ||
-                  ""
-                }
-                onChange={(event) =>
-                  updateNestedMeta(
-                    "headOrganizer",
-                    "phone",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Eseménynapló vezető">
-              <input
-                type="text"
-                value={
-                  meta.eventLogLeader || ""
-                }
-                onChange={(event) =>
-                  updateMeta(
-                    "eventLogLeader",
-                    event.target.value
-                  )
-                }
-                className={headerInputClass}
-              />
-            </HeaderField>
-
-
-            <HeaderField label="Egészségügyi szolgálat">
-              <div className="flex w-full flex-col">
-                <input
-                  type="text"
-                  value={
-                    meta.medicalService
-                      ?.organization || ""
-                  }
-                  onChange={(event) =>
-                    updateNestedMeta(
-                      "medicalService",
-                      "organization",
-                      event.target.value
-                    )
-                  }
-                  placeholder="Szervezet"
-                  className={headerInputClass}
-                />
-
-                <input
-                  type="text"
-                  value={
-                    meta.medicalService
-                      ?.person || ""
-                  }
-                  onChange={(event) =>
-                    updateNestedMeta(
-                      "medicalService",
-                      "person",
-                      event.target.value
-                    )
-                  }
-                  placeholder="Személy"
-                  className={`
-                    ${headerInputClass}
-                    text-[13px]
-                  `}
-                />
-              </div>
-            </HeaderField>
-
-
-            <HeaderField label="Katasztrófavédelem">
-              <div className="flex w-full flex-col">
-                <input
-                  type="text"
-                  value={
-                    meta.disasterProtection
-                      ?.organization || ""
-                  }
-                  onChange={(event) =>
-                    updateNestedMeta(
-                      "disasterProtection",
-                      "organization",
-                      event.target.value
-                    )
-                  }
-                  placeholder="Szervezet"
-                  className={headerInputClass}
-                />
-
-                <input
-                  type="text"
-                  value={
-                    meta.disasterProtection
-                      ?.person || ""
-                  }
-                  onChange={(event) =>
-                    updateNestedMeta(
-                      "disasterProtection",
-                      "person",
-                      event.target.value
-                    )
-                  }
-                  placeholder="Személy"
-                  className={`
-                    ${headerInputClass}
-                    text-[13px]
-                  `}
-                />
-              </div>
-            </HeaderField>
-
-          </div>
-
-        </div>
-
-
-        {/* ----------------------------------------------------
-            LOGÓ
-        ---------------------------------------------------- */}
-
-        <div
-          className="
-            absolute
-            right-6
-            top-5
-            flex
-            h-[72px]
-            w-[120px]
-            items-center
-            justify-center
-            max-[1100px]:right-[18px]
-            max-[1100px]:w-[100px]
-            max-[800px]:right-[14px]
-            max-[800px]:top-[14px]
-            max-[800px]:h-[55px]
-            max-[800px]:w-[90px]
-          "
-        >
-
-          <img
-            src={logo}
-            alt="Rába ETO logo"
-            className="
-              h-[150px]
-              w-auto
-              max-w-[150px]
-              object-contain
-            "
-          />
-
-        </div>
-
-      </section>
-
-
-      {/* ======================================================
-          ESEMÉNYNAPLÓ
-      ====================================================== */}
-
-      <section className="w-full">
-
-        <div
-          className="
-            mb-[10px]
-            flex
-            items-center
-            justify-between
-            gap-4
-          "
-        >
-
-          <div>
-            <h2
-              className="
-                m-0
-                text-[18px]
-                font-bold
-                text-gray-800
-              "
-            >
-              Eseménynapló
-            </h2>
-
-            <p
-              className="
-                mt-1
-                text-xs
-                text-gray-500
-              "
-            >
-              Az időpont és a kitöltő automatikusan
-              kerül rögzítésre az esemény első
-              adatbevitelekor. Az intézkedést meghatározó
-              személy alapértelmezetten a bejelentkezett
-              felhasználó, de szükség esetén kézzel megadható.
-            </p>
-          </div>
-
-          <span
-            className="
-              shrink-0
-              text-[13px]
-              text-gray-500
-            "
-          >
-            {events.length} esemény
-          </span>
-
-        </div>
-
-
-        {/* ----------------------------------------------------
-            TÁBLÁZAT
-        ---------------------------------------------------- */}
-
-        <div
-          className="
-            w-full
-            rounded-[10px]
-            border
-            border-[#C19A5B]
-            bg-white
-            shadow-[0_2px_5px_rgba(0,0,0,0.03)]
-          "
-        >
-
-          <table
-            className="
-              w-full
-              table-fixed
-              border-separate
-              border-spacing-0
-              text-[13px]
-            "
-          >
-
-            <colgroup>
-              <col className="w-[4%]" />
-              <col className="w-[8%]" />
-              <col className="w-[11%]" />
-              <col className="w-[20%]" />
-              <col className="w-[16%]" />
-              <col className="w-[35%]" />
-              <col className="w-[6%]" />
-            </colgroup>
-
-
-            <thead>
-
-              <tr>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-r
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-center
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  #
-                </th>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-r
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-left
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  Időpont
-                </th>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-r
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-left
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  Kitöltő
-                </th>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-r
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-left
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  Esemény
-                </th>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-r
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-left
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  Intézkedést meghatározó személy
-                </th>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-r
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-left
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  Intézkedés / eredmény
-                </th>
-
-                <th
-                  className="
-                    h-[42px]
-                    border-b
-                    border-[#e1e5eb]
-                    bg-[#2E7D32]
-                    px-[10px]
-                    py-2
-                    text-center
-                    align-middle
-                    text-xs
-                    font-bold
-                    text-white
-                  "
-                >
-                  Törlés
-                </th>
-
-              </tr>
-
-            </thead>
-
-
-            <tbody>
-
-              {events.length === 0 ? (
-                <tr>
-
-                  <td
-                    colSpan={7}
-                    className="
-                      p-7
-                      text-center
-                      text-[13px]
-                      text-[#8a94a3]
-                    "
-                  >
-                    Nincs még rögzített esemény.
-                  </td>
-
-                </tr>
-              ) : (
-                events.map(
-                  (event, index) => (
-                    <EventRow
-                      key={event.id}
-                      event={event}
-                      index={index}
-                      updateEvent={
-                        updateEvent
-                      }
-                      deleteEvent={
-                        deleteEvent
-                      }
-                    />
-                  )
-                )
-              )}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-
-        {/* ----------------------------------------------------
-            ESEMÉNY HOZZÁADÁSA
-        ---------------------------------------------------- */}
-
-        <div
-          className="
-            mt-3
-            flex
-            items-center
-            justify-between
-            gap-4
-          "
-        >
-
-          <span
-            className="
-              text-xs
-              leading-[1.4]
-              text-[#7b8492]
-            "
-          >
-            Új esemény hozzáadásakor az időpont automatikusan rögzítésre kerül.
-          </span>
-
-          <button
-            type="button"
-            onClick={addEvent}
-            className="
-              min-h-[38px]
-              shrink-0
-              rounded-[7px]
-              border
-              border-[#c8d0dc]
-              bg-white
-              px-4
-              py-2
-              text-[13px]
-              font-semibold
-              text-[#344054]
-              transition
-              hover:border-[#aeb8c7]
-              hover:bg-[#f5f7fa]
-              hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)]
-            "
-          >
-            + Esemény hozzáadása
-          </button>
-
-        </div>
-
-      </section>
-
-
-      {/* ======================================================
-          ALSÓ GOMBOK
-      ====================================================== */}
-
-      <div
-        className="
-          mt-6
-          flex
-          items-center
-          justify-end
-          gap-[10px]
-          border-t
-          border-[#e1e5eb]
-          pt-[18px]
-        "
-      >
-
-        <button
-          type="button"
-          onClick={handleSave}
-          className="
-            min-h-10
-            rounded-[7px]
-            border
-            border-[#aeb8c7]
-            bg-white
-            px-5
-            py-[9px]
-            text-[13px]
-            font-semibold
-            text-[#344054]
-            transition
-            active:translate-y-px
-            hover:border-[#98a5b7]
-            hover:bg-[#f5f7fa]
-            hover:shadow-[0_2px_5px_rgba(0,0,0,0.06)]
-          "
-        >
-          Mentés
-        </button>
-
-
-        <button
-          type="button"
-          onClick={handleFinalize}
-          className="
-            min-h-10
-            rounded-[7px]
-            border
-            border-[#2E7D32]
-            bg-[#2E7D32]
-            px-5
-            py-[9px]
-            text-[13px]
-            font-semibold
-            text-white
-            transition
-            active:translate-y-px
-            hover:border-[#256628]
-            hover:bg-[#256628]
-            hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]
-          "
-        >
-          Finalizálás
-        </button>
-
-      </div>
-
-
-      {/* ======================================================
-          VISSZA
-      ====================================================== */}
-
-      <button
-        type="button"
-        onClick={onBack}
-        className="
-          mt-6
-          rounded-[7px]
-          border
-          border-gray-300
-          bg-white
-          px-4
-          py-2
-          text-[13px]
-          font-semibold
-          text-gray-700
-          transition
-          hover:bg-gray-50
-        "
-      >
-        Vissza
-      </button>
-
-    </div>
-  );
-}
-
-
-/*
- * ============================================================
- * EVENT ROW
- * ============================================================
- */
-
-function EventRow({
-  event,
-  index,
-  updateEvent,
-  deleteEvent,
-}) {
-  /*
-   * Saját esemény / saját intézkedés mód.
-   *
-   * Ezt lokális UI state-ben tartjuk, így az üres
-   * custom input is megmarad "saját" módban.
-   */
-
-  const [customEventMode, setCustomEventMode] =
-    useState(
-      Boolean(
-        event.eventType &&
-          !EVENT_OPTIONS.includes(
-            event.eventType
-          )
-      )
-    );
-
-  const [customActionMode, setCustomActionMode] =
-    useState(
-      Boolean(
-        event.actionResult &&
-          !ACTION_OPTIONS.includes(
-            event.actionResult
-          )
-      )
-    );
-
-  const [customReporterMode, setCustomReporterMode] =
-    useState(
-      event.reporterMode === "custom" ||
-        Boolean(
-          event.reporterName &&
-            event.reporterName !== CURRENT_USER
-        )
-    );
-
-  const [customDecisionMakerMode, setCustomDecisionMakerMode] =
-    useState(
-      event.decisionMakerMode === "custom" ||
-        Boolean(
-          event.decisionMaker &&
-            event.decisionMaker !== CURRENT_USER
-        )
-    );
-
-
-  /*
-   * ----------------------------------------------------------
-   * ESEMÉNY TÍPUSA
-   * ----------------------------------------------------------
-   */
-
-  const handleEventTypeChange = (
-    value
-  ) => {
-    if (value === "__custom__") {
-      setCustomEventMode(true);
-
-      updateEvent(
-        index,
-        "eventType",
-        ""
-      );
-
-      return;
-    }
-
-    setCustomEventMode(false);
-
-    updateEvent(
-      index,
-      "eventType",
-      value
-    );
-  };
-
-
-  /*
-   * ----------------------------------------------------------
-   * INTÉZKEDÉS
-   * ----------------------------------------------------------
-   */
-
-  const handleActionChange = (
-    value
-  ) => {
-    if (value === "__custom__") {
-      setCustomActionMode(true);
-
-      updateEvent(
-        index,
-        "actionResult",
-        ""
-      );
-
-      return;
-    }
-
-    setCustomActionMode(false);
-
-    updateEvent(
-      index,
-      "actionResult",
-      value
-    );
-  };
-
-
-  /*
-   * ----------------------------------------------------------
-   * VISSZA STANDARD LISTÁHOZ
-   * ----------------------------------------------------------
-   */
-
-  const resetEventType = () => {
-    setCustomEventMode(false);
-
-    updateEvent(
-      index,
-      "eventType",
-      ""
-    );
-  };
-
-
-  const resetActionType = () => {
-    setCustomActionMode(false);
-
-    updateEvent(
-      index,
-      "actionResult",
-      ""
-    );
-  };
 function PersonSelector({
   event,
   index,
@@ -1865,14 +162,10 @@ function PersonSelector({
   modeField,
   placeholder,
 }) {
-  const isCustom =
-    event[modeField] === "custom" ||
-    Boolean(
-      event[nameField] &&
-        event[nameField] !== CURRENT_USER
-    );
-
   const hasEvent = Boolean(event.eventType);
+
+  const isCustom =
+    event[modeField] === "custom";
 
   const setCurrentUser = () => {
     updateEvent(
@@ -1900,11 +193,11 @@ function PersonSelector({
           type="text"
           autoFocus
           value={event[nameField] || ""}
-          onChange={(e) =>
+          onChange={(eventObject) =>
             updateEvent(
               index,
               nameField,
-              e.target.value
+              eventObject.target.value
             )
           }
           placeholder={placeholder}
@@ -1946,9 +239,16 @@ function PersonSelector({
 
   return (
     <select
-      value={hasEvent ? CURRENT_USER : ""}
-      onChange={(e) => {
-        if (e.target.value === "__custom__") {
+      value={
+        hasEvent && event[nameField] === CURRENT_USER
+          ? CURRENT_USER
+          : ""
+      }
+      onChange={(eventObject) => {
+        if (
+          eventObject.target.value ===
+          "__custom__"
+        ) {
           setCustom();
           return;
         }
@@ -1990,408 +290,2121 @@ function PersonSelector({
     </select>
   );
 }
-return (
-  <tr className="align-top">
 
-    {/* ====================================================
-        SORSZÁM
-    ==================================================== */}
+/* ============================================================
+   SELECTOR SEGÉD
+   ============================================================ */
 
-    <td
+function OptionSelector({
+  value,
+  options,
+  placeholder,
+  customLabel,
+  onChange,
+}) {
+  const isCustom =
+    value &&
+    !options.includes(value);
+
+  if (isCustom) {
+    return (
+      <div className="flex flex-col gap-1">
+        <input
+          type="text"
+          autoFocus
+          value={value || ""}
+          onChange={(event) =>
+            onChange(
+              event.target.value,
+              true
+            )
+          }
+          placeholder={customLabel}
+          className="
+            min-h-[32px]
+            w-full
+            rounded-[5px]
+            border
+            border-transparent
+            bg-transparent
+            px-[7px]
+            py-[5px]
+            text-[13px]
+            text-gray-800
+            outline-none
+            transition
+            hover:bg-[#f7f9fb]
+            focus:border-[#b8c3d4]
+            focus:bg-white
+          "
+        />
+
+        <button
+          type="button"
+          onClick={() => onChange("", false)}
+          className="
+            self-start
+            text-[11px]
+            text-gray-400
+            underline
+            hover:text-gray-600
+          "
+        >
+          Vissza a listához
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={options.includes(value) ? value : ""}
+      onChange={(event) => {
+        const selected =
+          event.target.value;
+
+        if (selected === "__custom__") {
+          onChange("", true);
+        } else {
+          onChange(selected, false);
+        }
+      }}
       className="
-        border-b
-        border-r
-        border-[#e4e7ec]
+        min-h-[32px]
+        w-full
+        cursor-pointer
+        rounded-[5px]
+        border
+        border-transparent
         bg-white
-        p-2
-        text-center
-        align-middle
-        font-semibold
-        text-[#6b7280]
+        px-[7px]
+        py-[5px]
+        pr-[26px]
+        text-[13px]
+        text-gray-800
+        outline-none
+        transition
+        hover:bg-[#f7f9fb]
+        focus:border-[#b8c3d4]
+        focus:bg-white
       "
     >
-      {event.sequenceNumber}
-    </td>
+      <option value="">
+        {placeholder}
+      </option>
 
+      {options.map((option) => (
+        <option
+          key={option}
+          value={option}
+        >
+          {option}
+        </option>
+      ))}
 
-    {/* ====================================================
-        IDŐPONT
-    ==================================================== */}
+      <option value="__custom__">
+        {customLabel}
+      </option>
+    </select>
+  );
+}
 
-    <td
+/* ============================================================
+   FEJLÉC MEZŐ
+   ============================================================ */
+
+function HeaderField({
+  label,
+  children,
+  first = false,
+}) {
+  return (
+    <div
       className="
+        grid
+        min-h-[38px]
+        grid-cols-[minmax(135px,175px)_minmax(0,1fr)]
+        items-center
+        gap-x-3
         border-b
-        border-r
-        border-[#e4e7ec]
-        bg-white
-        p-2
-        align-top
+        border-[#edf0f4]
+        py-[6px]
       "
     >
       <span
+        className={`
+          min-w-0
+          leading-[1.2]
+          font-semibold
+          text-[#2E7D32]
+          ${
+            first
+              ? "text-[14px]"
+              : "text-[13px]"
+          }
+        `}
+      >
+        {label}
+      </span>
+
+      <div className="min-w-0 w-full">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   ESEMÉNY MEZŐ SEGÉDFÜGGVÉNYEK
+   ============================================================ */
+
+const getEventType = (event) =>
+  event.eventType || "";
+
+const getAction = (event) =>
+  event.actionResult || "";
+
+/* ============================================================
+   EVENT ROW - DESKTOP
+   ============================================================ */
+
+function EventRow({
+  event,
+  index,
+  updateEvent,
+  deleteEvent,
+}) {
+  return (
+    <tr className="align-top">
+
+      <td
         className="
-          block
-          px-[7px]
-          py-[5px]
+          border-b
+          border-r
+          border-[#e4e7ec]
+          bg-white
+          p-2
           text-center
-          text-[13px]
-          tabular-nums
-          text-gray-700
+          align-middle
+          font-semibold
+          text-[#6b7280]
         "
       >
-        {event.time || "—"}
-      </span>
-    </td>
+        {event.sequenceNumber}
+      </td>
 
+      <td
+        className="
+          border-b
+          border-r
+          border-[#e4e7ec]
+          bg-white
+          p-2
+          align-top
+        "
+      >
+        <span
+          className="
+            block
+            px-[7px]
+            py-[5px]
+            text-center
+            text-[13px]
+            tabular-nums
+            text-gray-700
+          "
+        >
+          {event.time || "—"}
+        </span>
+      </td>
 
-    {/* ====================================================
-        KITÖLTŐ
-    ==================================================== */}
+      <td
+        className="
+          border-b
+          border-r
+          border-[#e4e7ec]
+          bg-white
+          p-2
+          align-top
+        "
+      >
+        <PersonSelector
+          event={event}
+          index={index}
+          updateEvent={updateEvent}
+          nameField="reporterName"
+          modeField="reporterMode"
+          placeholder="Kitöltő neve..."
+        />
+      </td>
 
-    <td
+      <td
+        className="
+          border-b
+          border-r
+          border-[#e4e7ec]
+          bg-white
+          p-2
+          align-top
+        "
+      >
+        <div className="flex w-full flex-col gap-[5px]">
+          <OptionSelector
+            value={getEventType(event)}
+            options={EVENT_OPTIONS}
+            placeholder="Válasszon eseményt..."
+            customLabel="Egyéb / saját esemény..."
+            onChange={(value) =>
+              updateEvent(
+                index,
+                "eventType",
+                value
+              )
+            }
+          />
+
+          <AutoResizeTextarea
+            value={
+              event.eventDescription || ""
+            }
+            onChange={(eventObject) =>
+              updateEvent(
+                index,
+                "eventDescription",
+                eventObject.target.value
+              )
+            }
+            placeholder="Esemény leírása..."
+          />
+        </div>
+      </td>
+
+      <td
+        className="
+          border-b
+          border-r
+          border-[#e4e7ec]
+          bg-white
+          p-2
+          align-top
+        "
+      >
+        <PersonSelector
+          event={event}
+          index={index}
+          updateEvent={updateEvent}
+          nameField="decisionMaker"
+          modeField="decisionMakerMode"
+          placeholder="Intézkedést meghatározó személy neve..."
+        />
+      </td>
+
+      <td
+        className="
+          border-b
+          border-r
+          border-[#e4e7ec]
+          bg-white
+          p-2
+          align-top
+        "
+      >
+        <OptionSelector
+          value={getAction(event)}
+          options={ACTION_OPTIONS}
+          placeholder="Válasszon intézkedést..."
+          customLabel="Egyéb / saját intézkedés..."
+          onChange={(value) =>
+            updateEvent(
+              index,
+              "actionResult",
+              value
+            )
+          }
+        />
+      </td>
+
+      <td
+        className="
+          border-b
+          border-[#e4e7ec]
+          bg-white
+          p-[5px]
+          text-center
+          align-middle
+        "
+      >
+        <button
+          type="button"
+          onClick={() =>
+            deleteEvent(index)
+          }
+          title="Esemény törlése"
+          aria-label="Esemény törlése"
+          className="
+            inline-flex
+            h-7
+            w-7
+            items-center
+            justify-center
+            rounded-[6px]
+            border
+            border-[#e0e4ea]
+            bg-white
+            text-[18px]
+            leading-none
+            text-[#8b95a5]
+            transition
+            hover:border-[#e3bcbc]
+            hover:bg-[#fff5f5]
+            hover:text-[#b42318]
+          "
+        >
+          ×
+        </button>
+      </td>
+
+    </tr>
+  );
+}
+
+/* ============================================================
+   EVENT CARD - MOBILE
+   ============================================================ */
+
+function EventCard({
+  event,
+  index,
+  updateEvent,
+  deleteEvent,
+}) {
+  return (
+    <div
       className="
-        border-b
-        border-r
-        border-[#e4e7ec]
+        rounded-xl
+        border
+        border-[#C19A5B]
         bg-white
-        p-2
-        align-top
-      "
-    >
-      <PersonSelector
-        event={event}
-        index={index}
-        updateEvent={updateEvent}
-        nameField="reporterName"
-        modeField="reporterMode"
-        placeholder="Kitöltő neve..."
-      />
-    </td>
-
-
-    {/* ====================================================
-        ESEMÉNY
-    ==================================================== */}
-
-    <td
-      className="
-        border-b
-        border-r
-        border-[#e4e7ec]
-        bg-white
-        p-2
-        align-top
+        p-3
+        shadow-[0_1px_3px_rgba(0,0,0,0.05)]
       "
     >
       <div
         className="
+          mb-3
           flex
-          w-full
-          flex-col
-          gap-[5px]
+          items-center
+          justify-between
+          gap-3
+          border-b
+          border-[#edf0f4]
+          pb-2
         "
       >
-        {!customEventMode ? (
-          <select
-            value={
-              EVENT_OPTIONS.includes(event.eventType)
-                ? event.eventType
-                : ""
-            }
-            onChange={(e) =>
-              handleEventTypeChange(e.target.value)
-            }
+        <div className="flex items-center gap-2">
+          <span
             className="
-              min-h-[30px]
-              w-full
-              cursor-pointer
-              rounded-[5px]
-              border
-              border-transparent
-              bg-white
-              px-[7px]
-              py-[5px]
-              pr-[26px]
-              text-[13px]
-              text-gray-800
-              outline-none
-              transition
-              hover:bg-[#f7f9fb]
-              focus:border-[#b8c3d4]
+              flex
+              h-7
+              w-7
+              items-center
+              justify-center
+              rounded-full
+              bg-[#C19A5B]
+              text-xs
+              font-bold
+              text-black
             "
           >
-            <option value="">
-              Válasszon eseményt...
-            </option>
+            {event.sequenceNumber}
+          </span>
 
-            {EVENT_OPTIONS.map((option) => (
-              <option
-                key={option}
-                value={option}
-              >
-                {option}
-              </option>
-            ))}
+          <span
+            className="
+              text-xs
+              font-semibold
+              text-gray-500
+            "
+          >
+            Esemény
+          </span>
+        </div>
 
-            <option value="__custom__">
-              Egyéb / saját esemény...
-            </option>
-          </select>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <input
-              type="text"
-              autoFocus
-              value={event.eventType || ""}
-              onChange={(e) =>
-                updateEvent(
-                  index,
-                  "eventType",
-                  e.target.value
-                )
-              }
-              placeholder="Saját esemény..."
-              className="
-                min-h-[30px]
-                w-full
-                rounded-[5px]
-                border
-                border-transparent
-                bg-transparent
-                px-[7px]
-                py-[5px]
-                text-[13px]
-                text-gray-800
-                outline-none
-                transition
-                hover:bg-[#f7f9fb]
-                focus:border-[#b8c3d4]
-                focus:bg-white
-              "
-            />
+        <div className="flex items-center gap-3">
+          <span
+            className="
+              text-xs
+              font-semibold
+              tabular-nums
+              text-[#2E7D32]
+            "
+          >
+            {event.time || "Időpont: —"}
+          </span>
 
-            <button
-              type="button"
-              onClick={resetEventType}
-              className="
-                self-start
-                text-[11px]
-                text-gray-400
-                underline
-                hover:text-gray-600
-              "
-            >
-              Vissza az eseménylistához
-            </button>
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={() =>
+              deleteEvent(index)
+            }
+            className="
+              flex
+              h-7
+              w-7
+              items-center
+              justify-center
+              rounded-md
+              border
+              border-[#e0e4ea]
+              bg-white
+              text-lg
+              text-[#8b95a5]
+              hover:border-[#e3bcbc]
+              hover:bg-[#fff5f5]
+              hover:text-[#b42318]
+            "
+            aria-label="Esemény törlése"
+          >
+            ×
+          </button>
+        </div>
+      </div>
 
+      <MobileField label="Kitöltő">
+        <PersonSelector
+          event={event}
+          index={index}
+          updateEvent={updateEvent}
+          nameField="reporterName"
+          modeField="reporterMode"
+          placeholder="Kitöltő neve..."
+        />
+      </MobileField>
+
+      <MobileField label="Esemény">
+        <OptionSelector
+          value={getEventType(event)}
+          options={EVENT_OPTIONS}
+          placeholder="Válasszon eseményt..."
+          customLabel="Egyéb / saját esemény..."
+          onChange={(value) =>
+            updateEvent(
+              index,
+              "eventType",
+              value
+            )
+          }
+        />
+      </MobileField>
+
+      <MobileField label="Esemény leírása">
         <AutoResizeTextarea
-          value={event.eventDescription || ""}
-          onChange={(e) =>
+          value={
+            event.eventDescription || ""
+          }
+          onChange={(eventObject) =>
             updateEvent(
               index,
               "eventDescription",
-              e.target.value
+              eventObject.target.value
             )
           }
           placeholder="Esemény leírása..."
+          className="
+            border
+            border-[#e1e5eb]
+            bg-[#fafbfc]
+          "
         />
-      </div>
-    </td>
+      </MobileField>
 
+      <MobileField label="Intézkedést meghatározó személy">
+        <PersonSelector
+          event={event}
+          index={index}
+          updateEvent={updateEvent}
+          nameField="decisionMaker"
+          modeField="decisionMakerMode"
+          placeholder="Személy neve..."
+        />
+      </MobileField>
 
-    {/* ====================================================
-        INTÉZKEDÉST MEGHATÁROZÓ SZEMÉLY
-    ==================================================== */}
+      <MobileField
+        label="Intézkedés / eredmény"
+        last
+      >
+        <OptionSelector
+          value={getAction(event)}
+          options={ACTION_OPTIONS}
+          placeholder="Válasszon intézkedést..."
+          customLabel="Egyéb / saját intézkedés..."
+          onChange={(value) =>
+            updateEvent(
+              index,
+              "actionResult",
+              value
+            )
+          }
+        />
+      </MobileField>
+    </div>
+  );
+}
 
-    <td
-      className="
-        border-b
-        border-r
-        border-[#e4e7ec]
-        bg-white
-        p-2
-        align-top
-      "
+/* ============================================================
+   MOBILE FIELD
+   ============================================================ */
+
+function MobileField({
+  label,
+  children,
+  last = false,
+}) {
+  return (
+    <div
+      className={`
+        ${!last ? "mb-3" : ""}
+      `}
     >
-      <PersonSelector
-        event={event}
-        index={index}
-        updateEvent={updateEvent}
-        nameField="decisionMaker"
-        modeField="decisionMakerMode"
-        placeholder="Intézkedést meghatározó személy neve..."
-      />
-    </td>
-
-
-    {/* ====================================================
-        INTÉZKEDÉS / EREDMÉNY
-    ==================================================== */}
-
-    <td
-      className="
-        border-b
-        border-r
-        border-[#e4e7ec]
-        bg-white
-        p-2
-        align-top
-      "
-    >
-      <div
+      <label
         className="
-          flex
-          w-full
-          flex-col
-          gap-[5px]
+          mb-1
+          block
+          text-[11px]
+          font-bold
+          uppercase
+          tracking-wide
+          text-[#2E7D32]
         "
       >
-        {!customActionMode ? (
-          <select
-            value={
-              ACTION_OPTIONS.includes(event.actionResult)
-                ? event.actionResult
-                : ""
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
+
+/* ============================================================
+   FŐ KOMPONENS
+   ============================================================ */
+
+function EventLogEditor({
+  match,
+  onBack,
+}) {
+  const [status, setStatus] = useState(
+    match.status
+  );
+
+  /* ==========================================================
+     META
+     ========================================================== */
+
+  const [meta, setMeta] = useState(() => ({
+    ...eventMeta,
+
+    securityOfficer: {
+      ...(eventMeta.securityOfficer || {}),
+    },
+
+    headOrganizer: {
+      ...(eventMeta.headOrganizer || {}),
+    },
+
+    medicalService: {
+      ...(eventMeta.medicalService || {}),
+    },
+
+    disasterProtection: {
+      ...(eventMeta.disasterProtection || {}),
+    },
+  }));
+
+  /* ==========================================================
+     ESEMÉNYEK
+     ========================================================== */
+
+  const [events, setEvents] = useState(() =>
+    (eventRows || []).map((event) => ({
+      ...event,
+    }))
+  );
+
+  /* ==========================================================
+     MEGJEGYZÉSEK
+     ========================================================== */
+
+  const [notes, setNotes] = useState([
+    {
+      id: 1,
+      text: "Teszt megjegyzés.",
+      createdAt: "2026-03-10 09:15",
+      createdBy: "Teszt Elek",
+    },
+  ]);
+
+  const [newNote, setNewNote] = useState("");
+  const [generatedPdfUrl, setGeneratedPdfUrl] =
+    useState(null);
+
+  const pdfContentRef = useRef(null);
+
+  const [isGeneratingPdf, setIsGeneratingPdf] =
+    useState(false);
+
+  /* ==========================================================
+     PDF OBJECT URL TAKARÍTÁSA
+     ========================================================== */
+
+  useEffect(() => {
+    return () => {
+      if (generatedPdfUrl) {
+        window.URL.revokeObjectURL(
+          generatedPdfUrl
+        );
+      }
+    };
+  }, [generatedPdfUrl]);
+
+  /* ==========================================================
+     STÁTUSZ
+     ========================================================== */
+
+  const isEditable =
+    status === "in_progress";
+
+  const isFinalized =
+    status === "finalized";
+
+  const isArchived =
+    status === "archived";
+
+  /* ==========================================================
+     META MÓDOSÍTÁS
+     ========================================================== */
+
+  const updateMeta = (
+    field,
+    value
+  ) => {
+    if (!isEditable) return;
+
+    setMeta((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
+
+  const updateNestedMeta = (
+    parent,
+    field,
+    value
+  ) => {
+    if (!isEditable) return;
+
+    setMeta((previous) => ({
+      ...previous,
+
+      [parent]: {
+        ...(previous[parent] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  /* ==========================================================
+     ESEMÉNY HOZZÁADÁSA
+     ========================================================== */
+
+  const addEvent = () => {
+    if (!isEditable) return;
+
+    setEvents((previous) => [
+      ...previous,
+      createEmptyEvent(previous),
+    ]);
+  };
+
+  /* ==========================================================
+     ESEMÉNY MÓDOSÍTÁSA
+     ========================================================== */
+
+  const updateEvent = (
+    index,
+    field,
+    value
+  ) => {
+    if (!isEditable) return;
+
+    setEvents((previous) =>
+      previous.map(
+        (event, currentIndex) => {
+          if (
+            currentIndex !== index
+          ) {
+            return event;
+          }
+
+          const updatedEvent = {
+            ...event,
+            [field]: value,
+          };
+
+          const hasEventData =
+            Boolean(
+              updatedEvent.eventType?.trim()
+            ) ||
+            Boolean(
+              updatedEvent.eventDescription?.trim()
+            ) ||
+            Boolean(
+              updatedEvent.actionResult?.trim()
+            );
+
+          if (
+            !event.time &&
+            hasEventData
+          ) {
+            const now = getNow();
+
+            updatedEvent.time =
+              now.time;
+
+            if (
+              updatedEvent.reporterMode !==
+              "custom"
+            ) {
+              updatedEvent.reporterName =
+                CURRENT_USER;
+
+              updatedEvent.reporterMode =
+                "current_user";
             }
-            onChange={(e) =>
-              handleActionChange(e.target.value)
+
+            if (
+              updatedEvent.decisionMakerMode !==
+              "custom"
+            ) {
+              updatedEvent.decisionMaker =
+                CURRENT_USER;
+
+              updatedEvent.decisionMakerMode =
+                "current_user";
             }
+
+            updatedEvent.createdBy =
+              CURRENT_USER;
+
+            updatedEvent.createdAt =
+              now.iso;
+
+            updatedEvent.lastModifiedAt =
+              now.iso;
+          } else if (event.time) {
+            updatedEvent.lastModifiedAt =
+              new Date().toISOString();
+          }
+
+          return updatedEvent;
+        }
+      )
+    );
+  };
+
+  /* ==========================================================
+     ESEMÉNY TÖRLÉSE
+     ========================================================== */
+
+  const deleteEvent = (index) => {
+    if (!isEditable) return;
+
+    setEvents((previous) =>
+      previous.filter(
+        (_, currentIndex) =>
+          currentIndex !== index
+      )
+    );
+  };
+
+  /* ==========================================================
+     MEGJEGYZÉS HOZZÁADÁSA
+     ========================================================== */
+
+  const addNote = () => {
+    if (!isFinalized) return;
+
+    const text =
+      newNote.trim();
+
+    if (!text) return;
+
+    setNotes((previous) => [
+      ...previous,
+      {
+        id: Date.now(),
+        text,
+        createdAt:
+          new Date().toLocaleString(
+            "hu-HU"
+          ),
+        createdBy:
+          CURRENT_USER,
+      },
+    ]);
+
+    setNewNote("");
+  };
+
+  /* ==========================================================
+     ESEMÉNYNAPLÓ MENTÉSE
+     ========================================================== */
+
+  const handleSave = () => {
+    if (!isEditable) return;
+
+    const data = {
+      meta,
+      events,
+      status,
+    };
+
+    console.log(
+      "Eseménynapló mentve:",
+      data
+    );
+  };
+
+  /* ==========================================================
+     FINALIZÁLÁS
+     ========================================================== */
+
+  const handleFinalize = async () => {
+    if (
+      !isEditable ||
+      isGeneratingPdf
+    ) {
+      return;
+    }
+
+    if (!pdfContentRef.current) {
+      console.error(
+        "PDF tartalom nem található."
+      );
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+
+    try {
+      const html =
+        pdfContentRef.current.innerHTML;
+
+      const res = await fetch(
+        "http://localhost:3000/generate-pdf",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            html,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          "PDF generálás sikertelen."
+        );
+      }
+
+      const blob =
+        await res.blob();
+
+      const url =
+        window.URL.createObjectURL(
+          blob
+        );
+
+      if (generatedPdfUrl) {
+        window.URL.revokeObjectURL(
+          generatedPdfUrl
+        );
+      }
+
+      setGeneratedPdfUrl(url);
+
+      setStatus("finalized");
+
+      console.log(
+        "Eseménynapló sikeresen véglegesítve."
+      );
+    } catch (error) {
+      console.error(
+        "PDF generálási hiba:",
+        error
+      );
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  /* ==========================================================
+     FEJLÉC INPUT CLASS
+     ========================================================== */
+
+  const headerInputClass = `
+    min-w-0
+    w-full
+    rounded-[5px]
+    border-0
+    bg-transparent
+    px-[6px]
+    py-1
+    text-[14px]
+    leading-[1.4]
+    text-gray-900
+    outline-none
+    transition
+    duration-150
+    hover:bg-[#f6f8fb]
+    focus:bg-[#f6f8fb]
+    focus:shadow-[inset_0_0_0_1px_#b9c4d5]
+  `;
+
+  /* ==========================================================
+     FINALIZED / ARCHIVED
+     ========================================================== */
+
+  if (
+    isFinalized ||
+    isArchived
+  ) {
+    return (
+      <div
+        className="
+          mx-auto
+          w-full
+          max-w-[1600px]
+          px-6
+          py-6
+          text-gray-800
+          max-[800px]:px-3
+          max-[800px]:py-3
+        "
+      >
+
+        {/* ====================================================
+            PDF DOKUMENTUM
+            ==================================================== */}
+
+        <div
+          className="
+            w-full
+            overflow-hidden
+            rounded-[8px]
+            border
+            border-[#d9dee7]
+            bg-[#525659]
+          "
+        >
+          {generatedPdfUrl ? (
+            <iframe
+              src={generatedPdfUrl}
+              title="Eseménynapló PDF"
+              className="
+                block
+                h-[85vh]
+                w-full
+                border-0
+              "
+            />
+          ) : (
+            <div
+              className="
+                flex
+                min-h-[400px]
+                items-center
+                justify-center
+                p-6
+                text-sm
+                text-white
+              "
+            >
+              A PDF dokumentum nem érhető el.
+            </div>
+          )}
+        </div>
+
+        {/* ====================================================
+            FINALIZED - MEGJEGYZÉSEK
+            ==================================================== */}
+
+        {isFinalized && (
+          <div
             className="
-              min-h-[30px]
-              w-full
-              cursor-pointer
-              rounded-[5px]
+              mt-6
+              rounded-[10px]
               border
-              border-transparent
+              border-[#d9dee7]
               bg-white
-              px-[7px]
-              py-[5px]
-              pr-[26px]
-              text-[13px]
-              text-gray-800
-              outline-none
-              transition
-              hover:bg-[#f7f9fb]
-              focus:border-[#b8c3d4]
+              p-5
             "
           >
-            <option value="">
-              Válasszon intézkedést...
-            </option>
+            <h3
+              className="
+                mb-4
+                text-base
+                font-bold
+                text-gray-800
+              "
+            >
+              Megjegyzések
+            </h3>
 
-            {ACTION_OPTIONS.map((option) => (
-              <option
-                key={option}
-                value={option}
+            {notes.length > 0 && (
+              <div
+                className="
+                  mb-4
+                  flex
+                  flex-col
+                  gap-2
+                "
               >
-                {option}
-              </option>
-            ))}
+                {notes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="
+                      rounded-[7px]
+                      border
+                      border-[#e1e5eb]
+                      bg-[#fafbfc]
+                      px-3
+                      py-[10px]
+                    "
+                  >
+                    <p
+                      className="
+                        whitespace-pre-wrap
+                        text-[13px]
+                        leading-[1.5]
+                        text-gray-800
+                      "
+                    >
+                      {note.text}
+                    </p>
 
-            <option value="__custom__">
-              Egyéb / saját intézkedés...
-            </option>
-          </select>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <input
-              type="text"
-              autoFocus
-              value={event.actionResult || ""}
-              onChange={(e) =>
-                updateEvent(
-                  index,
-                  "actionResult",
-                  e.target.value
+                    <div
+                      className="
+                        mt-1.5
+                        text-[11px]
+                        text-[#8a94a3]
+                      "
+                    >
+                      {note.createdBy}
+                      {" – "}
+                      {note.createdAt}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <textarea
+              value={newNote}
+              onChange={(event) =>
+                setNewNote(
+                  event.target.value
                 )
               }
-              placeholder="Saját intézkedés..."
+              placeholder="Új megjegyzés..."
+              rows={3}
               className="
-                min-h-[30px]
+                min-h-[80px]
                 w-full
-                rounded-[5px]
+                resize-y
+                rounded-[7px]
                 border
-                border-transparent
-                bg-transparent
-                px-[7px]
-                py-[5px]
+                border-[#cfd6e0]
+                px-[10px]
+                py-[9px]
                 text-[13px]
-                text-gray-800
                 outline-none
                 transition
-                hover:bg-[#f7f9fb]
-                focus:border-[#b8c3d4]
-                focus:bg-white
+                focus:border-[#9eabbc]
               "
             />
 
-            <button
-              type="button"
-              onClick={resetActionType}
+            <div
               className="
-                self-start
-                text-[11px]
-                text-gray-400
-                underline
-                hover:text-gray-600
+                mt-3
+                flex
+                justify-end
+                gap-2
+                max-[600px]:flex-col
               "
             >
-              Vissza az intézkedéslistához
-            </button>
+              <button
+                type="button"
+                onClick={onBack}
+                className="
+                  min-h-10
+                  rounded-[7px]
+                  border
+                  border-gray-300
+                  bg-white
+                  px-5
+                  py-2
+                  text-[13px]
+                  font-semibold
+                  text-gray-700
+                  transition
+                  hover:bg-gray-50
+                  max-[600px]:w-full
+                "
+              >
+                Vissza
+              </button>
+
+              <button
+                type="button"
+                onClick={addNote}
+                disabled={!newNote.trim()}
+                className="
+                  min-h-10
+                  rounded-[7px]
+                  border
+                  border-[#2E7D32]
+                  bg-[#2E7D32]
+                  px-5
+                  py-2
+                  text-[13px]
+                  font-semibold
+                  text-white
+                  transition
+                  hover:bg-[#256628]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                  max-[600px]:w-full
+                "
+              >
+                Megjegyzés mentése
+              </button>
+            </div>
           </div>
         )}
+
+        {/* ====================================================
+            ARCHIVED - CSAK MEGLÉVŐ MEGJEGYZÉSEK
+            ==================================================== */}
+
+        {isArchived &&
+          notes.length > 0 && (
+            <div
+              className="
+                mt-6
+                rounded-[10px]
+                border
+                border-[#d9dee7]
+                bg-white
+                p-5
+              "
+            >
+              <h3
+                className="
+                  mb-4
+                  text-base
+                  font-bold
+                  text-gray-800
+                "
+              >
+                Megjegyzések
+              </h3>
+
+              <div
+                className="
+                  flex
+                  flex-col
+                  gap-2
+                "
+              >
+                {notes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="
+                      rounded-[7px]
+                      border
+                      border-[#e1e5eb]
+                      bg-[#fafbfc]
+                      px-3
+                      py-[10px]
+                    "
+                  >
+                    <p
+                      className="
+                        whitespace-pre-wrap
+                        text-[13px]
+                        leading-[1.5]
+                        text-gray-800
+                      "
+                    >
+                      {note.text}
+                    </p>
+
+                    <div
+                      className="
+                        mt-1.5
+                        text-[11px]
+                        text-[#8a94a3]
+                      "
+                    >
+                      {note.createdBy}
+                      {" – "}
+                      {note.createdAt}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        {/* ====================================================
+            VISSZA
+            ==================================================== */}
+
+        <button
+          type="button"
+          onClick={onBack}
+          className="
+            mt-6
+            rounded-[7px]
+            border
+            border-gray-300
+            bg-white
+            px-5
+            py-2
+            text-[13px]
+            font-semibold
+            text-gray-700
+            transition
+            hover:bg-gray-50
+            max-[600px]:w-full
+          "
+        >
+          Vissza
+        </button>
+
       </div>
-    </td>
+    );
+  }
 
+  /* ==========================================================
+     EDITABLE / IN PROGRESS
+     ========================================================== */
 
-    {/* ====================================================
-        TÖRLÉS
-    ==================================================== */}
-
-    <td
+  return (
+    <div
       className="
-        border-b
-        border-[#e4e7ec]
-        bg-white
-        p-[5px]
-        text-center
-        align-middle
+        mx-auto
+        w-full
+        max-w-[1600px]
+        p-6
+        font-sans
+        text-gray-800
+        max-[800px]:p-3
       "
     >
-      <button
-        type="button"
-        onClick={() => deleteEvent(index)}
-        title="Esemény törlése"
-        aria-label="Esemény törlése"
+
+      {/* ======================================================
+          REJTETT PDF FORRÁS
+          ====================================================== */}
+
+      <div
+        ref={pdfContentRef}
+        style={{
+          position: "absolute",
+          left: "-100000px",
+          top: 0,
+          width: "1120px",
+          background: "white",
+        }}
+      >
+        <EventLogDocument
+          meta={meta}
+          rows={events}
+        />
+      </div>
+
+      {/* ======================================================
+          STÁTUSZ
+          ====================================================== */}
+
+      <div
         className="
-          inline-flex
-          h-7
-          w-7
+          mb-4
+          flex
           items-center
-          justify-center
-          rounded-[6px]
+          gap-2
+          rounded-lg
           border
-          border-[#e0e4ea]
-          bg-white
-          text-[18px]
-          leading-none
-          text-[#8b95a5]
-          transition
-          hover:border-[#e3bcbc]
-          hover:bg-[#fff5f5]
-          hover:text-[#b42318]
+          border-[#C19A5B]
+          bg-[#f8fafc]
+          px-[14px]
+          py-[10px]
+          text-[13px]
         "
       >
-        ×
+        <strong className="font-bold">
+          Állapot:
+        </strong>
+
+        <span className="text-[#596579]">
+          Megnyitott
+        </span>
+      </div>
+
+      {/* ======================================================
+          DOKUMENTUM FEJLÉC
+          ====================================================== */}
+
+      <section
+        className="
+          relative
+          mb-6
+          rounded-xl
+          border
+          border-[#C19A5B]
+          bg-white
+          px-6
+          py-[22px]
+          shadow-[0_2px_6px_rgba(0,0,0,0.04)]
+          max-[800px]:p-4
+        "
+      >
+        <div
+          className="
+            grid
+            grid-cols-1
+            gap-x-[42px]
+            gap-y-1
+            pt-[72px]
+            lg:grid-cols-2
+            lg:pt-0
+            lg:pr-[170px]
+            max-[1100px]:lg:gap-x-6
+          "
+        >
+
+          {/* BAL / ELSŐ OSZLOP */}
+
+          <div
+            className="
+              flex
+              min-w-0
+              flex-col
+            "
+          >
+            <HeaderField
+              label="Meccs megnevezése"
+              first
+            >
+              <input
+                type="text"
+                value={
+                  meta.competitionName || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "competitionName",
+                    event.target.value
+                  )
+                }
+                className={`
+                  ${headerInputClass}
+                  text-[18px]
+                  font-bold
+                `}
+              />
+            </HeaderField>
+
+            <HeaderField label="Hazai csapat">
+              <input
+                type="text"
+                value={
+                  meta.homeTeam || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "homeTeam",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Vendég csapat">
+              <input
+                type="text"
+                value={
+                  meta.awayTeam || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "awayTeam",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Mérkőzés dátuma">
+              <input
+                type="text"
+                value={
+                  meta.matchDate || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "matchDate",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Mérkőzés időpontja">
+              <input
+                type="text"
+                value={
+                  meta.matchTime || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "matchTime",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Szervező">
+              <input
+                type="text"
+                value={
+                  meta.organizer || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "organizer",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+          </div>
+
+          {/* JOBB / MÁSODIK OSZLOP */}
+
+          <div
+            className="
+              flex
+              min-w-0
+              flex-col
+            "
+          >
+            <HeaderField label="Biztonsági vezető">
+              <input
+                type="text"
+                value={
+                  meta.securityOfficer?.name ||
+                  ""
+                }
+                onChange={(event) =>
+                  updateNestedMeta(
+                    "securityOfficer",
+                    "name",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Biztonsági vezető telefonszáma">
+              <input
+                type="text"
+                value={
+                  meta.securityOfficer?.phone ||
+                  ""
+                }
+                onChange={(event) =>
+                  updateNestedMeta(
+                    "securityOfficer",
+                    "phone",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Főszervező">
+              <input
+                type="text"
+                value={
+                  meta.headOrganizer?.name ||
+                  ""
+                }
+                onChange={(event) =>
+                  updateNestedMeta(
+                    "headOrganizer",
+                    "name",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Főszervező telefonszáma">
+              <input
+                type="text"
+                value={
+                  meta.headOrganizer?.phone ||
+                  ""
+                }
+                onChange={(event) =>
+                  updateNestedMeta(
+                    "headOrganizer",
+                    "phone",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Eseménynapló vezető">
+              <input
+                type="text"
+                value={
+                  meta.eventLogLeader || ""
+                }
+                onChange={(event) =>
+                  updateMeta(
+                    "eventLogLeader",
+                    event.target.value
+                  )
+                }
+                className={headerInputClass}
+              />
+            </HeaderField>
+
+            <HeaderField label="Egészségügyi szolgálat">
+              <div
+                className="
+                  flex
+                  w-full
+                  flex-col
+                "
+              >
+                <input
+                  type="text"
+                  value={
+                    meta.medicalService
+                      ?.organization || ""
+                  }
+                  onChange={(event) =>
+                    updateNestedMeta(
+                      "medicalService",
+                      "organization",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Szervezet"
+                  className={headerInputClass}
+                />
+
+                <input
+                  type="text"
+                  value={
+                    meta.medicalService
+                      ?.person || ""
+                  }
+                  onChange={(event) =>
+                    updateNestedMeta(
+                      "medicalService",
+                      "person",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Személy"
+                  className={`
+                    ${headerInputClass}
+                    text-[13px]
+                  `}
+                />
+              </div>
+            </HeaderField>
+
+            <HeaderField label="Katasztrófavédelem">
+              <div
+                className="
+                  flex
+                  w-full
+                  flex-col
+                "
+              >
+                <input
+                  type="text"
+                  value={
+                    meta.disasterProtection
+                      ?.organization || ""
+                  }
+                  onChange={(event) =>
+                    updateNestedMeta(
+                      "disasterProtection",
+                      "organization",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Szervezet"
+                  className={headerInputClass}
+                />
+
+                <input
+                  type="text"
+                  value={
+                    meta.disasterProtection
+                      ?.person || ""
+                  }
+                  onChange={(event) =>
+                    updateNestedMeta(
+                      "disasterProtection",
+                      "person",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Személy"
+                  className={`
+                    ${headerInputClass}
+                    text-[13px]
+                  `}
+                />
+              </div>
+            </HeaderField>
+          </div>
+        </div>
+
+        {/* LOGÓ */}
+
+        <div
+          className="
+            absolute
+            right-6
+            top-1
+            z-10
+            flex
+            h-[90px]
+            w-[120px]
+            items-start
+            justify-center
+            max-[800px]:right-[14px]
+            max-[800px]:top-[4px]
+            max-[800px]:h-[65px]
+            max-[800px]:w-[90px]
+          "
+        >
+          <img
+            src={logo}
+            alt="Rába ETO logo"
+            className="
+              block
+              h-[105px]
+              w-[105px]
+              object-contain
+              max-[800px]:h-[70px]
+              max-[800px]:w-[70px]
+            "
+          />
+        </div>
+      </section>
+
+      {/* ======================================================
+          ESEMÉNYNAPLÓ
+          ====================================================== */}
+
+      <section className="w-full">
+
+        <div
+          className="
+            mb-[10px]
+            flex
+            items-end
+            justify-between
+            gap-4
+          "
+        >
+          <div>
+            <h2
+              className="
+                m-0
+                text-[18px]
+                font-bold
+                text-gray-800
+              "
+            >
+              Eseménynapló
+            </h2>
+
+            <p
+              className="
+                mt-1
+                max-w-[900px]
+                text-xs
+                leading-[1.5]
+                text-gray-500
+              "
+            >
+              Az időpont és a kitöltő automatikusan
+              kerül rögzítésre az esemény első
+              adatbevitelekor. Az intézkedést
+              meghatározó személy alapértelmezetten
+              a bejelentkezett felhasználó.
+            </p>
+          </div>
+
+          <span
+            className="
+              shrink-0
+              text-[13px]
+              text-gray-500
+            "
+          >
+            {events.length} esemény
+          </span>
+        </div>
+
+        {/* ====================================================
+            DESKTOP TÁBLÁZAT
+            ==================================================== */}
+
+        <div
+          className="
+            hidden
+            w-full
+            overflow-x-auto
+            rounded-[10px]
+            border
+            border-[#C19A5B]
+            bg-white
+            shadow-[0_2px_5px_rgba(0,0,0,0.03)]
+            lg:block
+          "
+        >
+          <table
+            className="
+              w-full
+              min-w-[1000px]
+              table-fixed
+              border-separate
+              border-spacing-0
+              text-[13px]
+            "
+          >
+            <colgroup>
+              <col className="w-[4%]" />
+              <col className="w-[8%]" />
+              <col className="w-[11%]" />
+              <col className="w-[20%]" />
+              <col className="w-[16%]" />
+              <col className="w-[35%]" />
+              <col className="w-[6%]" />
+            </colgroup>
+
+            <thead>
+              <tr>
+                {[
+                  "#",
+                  "Időpont",
+                  "Kitöltő",
+                  "Esemény",
+                  "Intézkedést meghatározó személy",
+                  "Intézkedés / eredmény",
+                  "Törlés",
+                ].map((title, index) => (
+                  <th
+                    key={title}
+                    className={`
+                      h-[42px]
+                      border-b
+                      border-r
+                      border-[#e1e5eb]
+                      bg-[#2E7D32]
+                      px-[10px]
+                      py-2
+                      align-middle
+                      text-xs
+                      font-bold
+                      text-white
+                      ${
+                        index === 0 ||
+                        index === 6
+                          ? "text-center"
+                          : "text-left"
+                      }
+                    `}
+                  >
+                    {title}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {events.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="
+                      p-7
+                      text-center
+                      text-[13px]
+                      text-[#8a94a3]
+                    "
+                  >
+                    Nincs még rögzített esemény.
+                  </td>
+                </tr>
+              ) : (
+                events.map(
+                  (event, index) => (
+                    <EventRow
+                      key={event.id}
+                      event={event}
+                      index={index}
+                      updateEvent={
+                        updateEvent
+                      }
+                      deleteEvent={
+                        deleteEvent
+                      }
+                    />
+                  )
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ====================================================
+            MOBILE / TABLET KÁRTYÁK
+            ==================================================== */}
+
+        <div
+          className="
+            flex
+            flex-col
+            gap-3
+            lg:hidden
+          "
+        >
+          {events.length === 0 ? (
+            <div
+              className="
+                rounded-xl
+                border
+                border-[#C19A5B]
+                bg-white
+                p-6
+                text-center
+                text-[13px]
+                text-[#8a94a3]
+              "
+            >
+              Nincs még rögzített esemény.
+            </div>
+          ) : (
+            events.map(
+              (event, index) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  index={index}
+                  updateEvent={
+                    updateEvent
+                  }
+                  deleteEvent={
+                    deleteEvent
+                  }
+                />
+              )
+            )
+          )}
+        </div>
+
+        {/* ====================================================
+            ESEMÉNY HOZZÁADÁSA
+            ==================================================== */}
+
+        <div
+          className="
+            mt-3
+            flex
+            items-center
+            justify-between
+            gap-4
+            max-[600px]:flex-col
+            max-[600px]:items-stretch
+          "
+        >
+          <span
+            className="
+              text-xs
+              leading-[1.4]
+              text-[#7b8492]
+            "
+          >
+            Új esemény hozzáadásakor az időpont
+            automatikusan rögzítésre kerül.
+          </span>
+
+          <button
+            type="button"
+            onClick={addEvent}
+            className="
+              min-h-[38px]
+              shrink-0
+              rounded-[7px]
+              border
+              border-[#c8d0dc]
+              bg-white
+              px-4
+              py-2
+              text-[13px]
+              font-semibold
+              text-[#344054]
+              transition
+              hover:border-[#aeb8c7]
+              hover:bg-[#f5f7fa]
+              hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)]
+              max-[600px]:w-full
+            "
+          >
+            + Esemény hozzáadása
+          </button>
+        </div>
+      </section>
+
+      {/* ======================================================
+          ALSÓ GOMBOK
+          ====================================================== */}
+
+      <div
+        className="
+          mt-6
+          flex
+          items-center
+          justify-end
+          gap-[10px]
+          border-t
+          border-[#e1e5eb]
+          pt-[18px]
+          max-[600px]:flex-col-reverse
+          max-[600px]:items-stretch
+        "
+      >
+        <button
+          type="button"
+          onClick={handleSave}
+          className="
+            min-h-10
+            rounded-[7px]
+            border
+            border-[#aeb8c7]
+            bg-white
+            px-5
+            py-[9px]
+            text-[13px]
+            font-semibold
+            text-[#344054]
+            transition
+            active:translate-y-px
+            hover:border-[#98a5b7]
+            hover:bg-[#f5f7fa]
+            hover:shadow-[0_2px_5px_rgba(0,0,0,0.06)]
+            max-[600px]:w-full
+          "
+        >
+          Mentés
+        </button>
+
+        <button
+          type="button"
+          onClick={handleFinalize}
+          disabled={isGeneratingPdf}
+          className="
+            min-h-10
+            rounded-[7px]
+            border
+            border-[#2E7D32]
+            bg-[#2E7D32]
+            px-5
+            py-[9px]
+            text-[13px]
+            font-semibold
+            text-white
+            transition
+            active:translate-y-px
+            hover:border-[#256628]
+            hover:bg-[#256628]
+            hover:shadow-[0_2px_5px_rgba(0,0,0,0.1)]
+            disabled:cursor-not-allowed
+            disabled:opacity-60
+            max-[600px]:w-full
+          "
+        >
+          {isGeneratingPdf
+            ? "PDF generálása..."
+            : "Véglegesítés"}
+        </button>
+      </div>
+
+      {/* ======================================================
+          VISSZA
+          ====================================================== */}
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="
+          mt-6
+          rounded-[7px]
+          border
+          border-gray-300
+          bg-white
+          px-4
+          py-2
+          text-[13px]
+          font-semibold
+          text-gray-700
+          transition
+          hover:bg-gray-50
+          max-[600px]:w-full
+        "
+      >
+        Vissza
       </button>
-    </td>
 
-  </tr>
-);
-
+    </div>
+  );
 }
-
 
 export default EventLogEditor;
