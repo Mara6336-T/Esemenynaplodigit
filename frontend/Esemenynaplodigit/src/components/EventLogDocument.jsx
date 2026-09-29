@@ -1,5 +1,5 @@
 // EventLogDocument.jsx
-
+import logo from "../assets/logo.png";
 export default function EventLogDocument({ meta, rows }) {
   return (
     <div className="p-10 text-sm font-sans text-black">
@@ -16,8 +16,9 @@ export default function EventLogDocument({ meta, rows }) {
         <img
             src={window.location.origin + "/logo.png"}
             alt="logo"
-            style={{ position: 'absolute', right: '28px', top: '10px', height: '150px', width: 'auto', objectFit: 'contain' }}/>
+            style={{ position: 'absolute', right: '28px', top: '0px', height: '150px', width: 'auto', objectFit: 'contain',background: "transparent" }}/>
         </div>
+
 
       {/* Metadata */}
       <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-6">
