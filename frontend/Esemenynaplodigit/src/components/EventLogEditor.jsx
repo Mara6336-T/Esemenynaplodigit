@@ -13,6 +13,8 @@ import {
 
 const CURRENT_USER = "Felhasználó";
 
+const CUSTOM_VALUE = "__custom__";
+
 const EVENT_OPTIONS = [
   "Meccs kezdete",
   "Félidő",
@@ -78,12 +80,37 @@ const createEmptyEvent = (events) => {
     decisionMaker: "",
     decisionMakerMode: "",
 
+    actionType: "",
     actionResult: "",
 
     createdAt: "",
     lastModifiedAt: "",
     createdBy: "",
   };
+};
+
+/*
+ * Régebbi adatok kompatibilitása.
+ *
+ * Ha a korábbi verzióban az actionResult tartalmazta
+ * magát a kiválasztott intézkedést, áthelyezzük actionType-ba.
+ */
+const normalizeEvent = (event) => {
+  const normalized = {
+    ...event,
+  };
+
+  if (
+    !normalized.actionType &&
+    ACTION_OPTIONS.includes(normalized.actionResult)
+  ) {
+    normalized.actionType =
+      normalized.actionResult;
+
+    normalized.actionResult = "";
+  }
+
+  return normalized;
 };
 
 /* ============================================================
@@ -182,8 +209,17 @@ function PersonSelector({
   };
 
   const setCustom = () => {
-    updateEvent(index, nameField, "");
-    updateEvent(index, modeField, "custom");
+    updateEvent(
+      index,
+      nameField,
+      ""
+    );
+
+    updateEvent(
+      index,
+      modeField,
+      "custom"
+    );
   };
 
   if (isCustom) {
@@ -240,7 +276,8 @@ function PersonSelector({
   return (
     <select
       value={
-        hasEvent && event[nameField] === CURRENT_USER
+        hasEvent &&
+        event[nameField] === CURRENT_USER
           ? CURRENT_USER
           : ""
       }
@@ -297,26 +334,32 @@ function PersonSelector({
 
 function OptionSelector({
   value,
+  customText,
   options,
   placeholder,
   customLabel,
   onChange,
 }) {
   const isCustom =
-    value &&
-    !options.includes(value);
+    value === CUSTOM_VALUE;
 
+  /*
+   * CUSTOM USE CASE
+   *
+   * Ha az "Egyéb / saját..." opció van kiválasztva,
+   * akkor maga az input tartalmazza az egyedi szöveget.
+   */
   if (isCustom) {
     return (
       <div className="flex flex-col gap-1">
         <input
           type="text"
           autoFocus
-          value={value || ""}
+          value={customText || ""}
           onChange={(event) =>
             onChange(
-              event.target.value,
-              true
+              CUSTOM_VALUE,
+              event.target.value
             )
           }
           placeholder={customLabel}
@@ -341,7 +384,9 @@ function OptionSelector({
 
         <button
           type="button"
-          onClick={() => onChange("", false)}
+          onClick={() =>
+            onChange("", "")
+          }
           className="
             self-start
             text-[11px]
@@ -356,17 +401,34 @@ function OptionSelector({
     );
   }
 
+  /*
+   * NORMAL USE CASE
+   *
+   * Az előre definiált opciók közül választunk.
+   */
   return (
     <select
-      value={options.includes(value) ? value : ""}
+      value={
+        options.includes(value)
+          ? value
+          : ""
+      }
       onChange={(event) => {
         const selected =
           event.target.value;
 
-        if (selected === "__custom__") {
-          onChange("", true);
+        if (
+          selected === CUSTOM_VALUE
+        ) {
+          onChange(
+            CUSTOM_VALUE,
+            ""
+          );
         } else {
-          onChange(selected, false);
+          onChange(
+            selected,
+            ""
+          );
         }
       }}
       className="
@@ -402,7 +464,7 @@ function OptionSelector({
         </option>
       ))}
 
-      <option value="__custom__">
+      <option value={CUSTOM_VALUE}>
         {customLabel}
       </option>
     </select>
@@ -455,14 +517,14 @@ function HeaderField({
 }
 
 /* ============================================================
-   ESEMÉNY MEZŐ SEGÉDFÜGGVÉNYEK
+   ESEMÉNY / INTÉZKEDÉS MEZŐK
    ============================================================ */
 
 const getEventType = (event) =>
   event.eventType || "";
 
 const getAction = (event) =>
-  event.actionResult || "";
+  event.actionType || "";
 
 /* ============================================================
    EVENT ROW - DESKTOP
@@ -538,6 +600,10 @@ function EventRow({
         />
       </td>
 
+      {/* ======================================================
+          ESEMÉNY
+         ====================================================== */}
+
       <td
         className="
           border-b
@@ -549,35 +615,77 @@ function EventRow({
         "
       >
         <div className="flex w-full flex-col gap-[5px]">
+
           <OptionSelector
             value={getEventType(event)}
+            customText={
+              event.eventDescription || ""
+            }
             options={EVENT_OPTIONS}
             placeholder="Válasszon eseményt..."
             customLabel="Egyéb / saját esemény..."
-            onChange={(value) =>
+            onChange={(
+              value,
+              customText
+            ) => {
+              if (
+                value === CUSTOM_VALUE
+              ) {
+                updateEvent(
+                  index,
+                  "eventType",
+                  CUSTOM_VALUE
+                );
+
+                if (
+                  customText !== undefined
+                ) {
+                  updateEvent(
+                    index,
+                    "eventDescription",
+                    customText
+                  );
+                }
+
+                return;
+              }
+
               updateEvent(
                 index,
                 "eventType",
                 value
-              )
-            }
-          />
+              );
 
-          <AutoResizeTextarea
-            value={
-              event.eventDescription || ""
-            }
-            onChange={(eventObject) =>
               updateEvent(
                 index,
                 "eventDescription",
-                eventObject.target.value
-              )
-            }
-            placeholder="Esemény leírása..."
+                ""
+              );
+            }}
           />
+
+          {event.eventType !== CUSTOM_VALUE && (
+            <AutoResizeTextarea
+              value={
+                event.eventDescription || ""
+              }
+              onChange={(eventObject) =>
+                updateEvent(
+                  index,
+                  "eventDescription",
+                  eventObject.target.value
+                )
+              }
+              placeholder="Esemény leírása..."
+            />
+          )}
+
         </div>
       </td>
+
+      {/* ======================================================
+          INTÉZKEDÉST MEGHATÁROZÓ
+         ====================================================== */}
 
       <td
         className="
@@ -599,6 +707,10 @@ function EventRow({
         />
       </td>
 
+      {/* ======================================================
+          INTÉZKEDÉS
+         ====================================================== */}
+
       <td
         className="
           border-b
@@ -609,20 +721,78 @@ function EventRow({
           align-top
         "
       >
-        <OptionSelector
-          value={getAction(event)}
-          options={ACTION_OPTIONS}
-          placeholder="Válasszon intézkedést..."
-          customLabel="Egyéb / saját intézkedés..."
-          onChange={(value) =>
-            updateEvent(
-              index,
-              "actionResult",
-              value
-            )
-          }
-        />
+        <div className="flex w-full flex-col gap-[5px]">
+
+          <OptionSelector
+            value={getAction(event)}
+            customText={
+              event.actionResult || ""
+            }
+            options={ACTION_OPTIONS}
+            placeholder="Válasszon intézkedést..."
+            customLabel="Egyéb / saját intézkedés..."
+            onChange={(
+              value,
+              customText
+            ) => {
+              if (
+                value === CUSTOM_VALUE
+              ) {
+                updateEvent(
+                  index,
+                  "actionType",
+                  CUSTOM_VALUE
+                );
+
+                if (
+                  customText !== undefined
+                ) {
+                  updateEvent(
+                    index,
+                    "actionResult",
+                    customText
+                  );
+                }
+
+                return;
+              }
+
+              updateEvent(
+                index,
+                "actionType",
+                value
+              );
+
+              updateEvent(
+                index,
+                "actionResult",
+                ""
+              );
+            }}
+          />
+
+          {event.actionType !== CUSTOM_VALUE && (
+            <AutoResizeTextarea
+              value={
+                event.actionResult || ""
+              }
+              onChange={(eventObject) =>
+                updateEvent(
+                  index,
+                  "actionResult",
+                  eventObject.target.value
+                )
+              }
+              placeholder="Intézkedés / eredmény leírása..."
+            />
+          )}
+
+        </div>
       </td>
+
+      {/* ======================================================
+          TÖRLÉS
+         ====================================================== */}
 
       <td
         className="
@@ -784,39 +954,75 @@ function EventCard({
       <MobileField label="Esemény">
         <OptionSelector
           value={getEventType(event)}
+          customText={
+            event.eventDescription || ""
+          }
           options={EVENT_OPTIONS}
           placeholder="Válasszon eseményt..."
           customLabel="Egyéb / saját esemény..."
-          onChange={(value) =>
+          onChange={(
+            value,
+            customText
+          ) => {
+            if (
+              value === CUSTOM_VALUE
+            ) {
+              updateEvent(
+                index,
+                "eventType",
+                CUSTOM_VALUE
+              );
+
+              if (
+                customText !== undefined
+              ) {
+                updateEvent(
+                  index,
+                  "eventDescription",
+                  customText
+                );
+              }
+
+              return;
+            }
+
             updateEvent(
               index,
               "eventType",
               value
-            )
-          }
-        />
-      </MobileField>
+            );
 
-      <MobileField label="Esemény leírása">
-        <AutoResizeTextarea
-          value={
-            event.eventDescription || ""
-          }
-          onChange={(eventObject) =>
             updateEvent(
               index,
               "eventDescription",
-              eventObject.target.value
-            )
-          }
-          placeholder="Esemény leírása..."
-          className="
-            border
-            border-[#e1e5eb]
-            bg-[#fafbfc]
-          "
+              ""
+            );
+          }}
         />
       </MobileField>
+
+      {event.eventType !== CUSTOM_VALUE && (
+        <MobileField label="Esemény leírása">
+          <AutoResizeTextarea
+            value={
+              event.eventDescription || ""
+            }
+            onChange={(eventObject) =>
+              updateEvent(
+                index,
+                "eventDescription",
+                eventObject.target.value
+              )
+            }
+            placeholder="Esemény leírása..."
+            className="
+              border
+              border-[#e1e5eb]
+              bg-[#fafbfc]
+            "
+          />
+        </MobileField>
+      )}
 
       <MobileField label="Intézkedést meghatározó személy">
         <PersonSelector
@@ -831,22 +1037,85 @@ function EventCard({
 
       <MobileField
         label="Intézkedés / eredmény"
-        last
       >
         <OptionSelector
           value={getAction(event)}
+          customText={
+            event.actionResult || ""
+          }
           options={ACTION_OPTIONS}
           placeholder="Válasszon intézkedést..."
           customLabel="Egyéb / saját intézkedés..."
-          onChange={(value) =>
+          onChange={(
+            value,
+            customText
+          ) => {
+            if (
+              value === CUSTOM_VALUE
+            ) {
+              updateEvent(
+                index,
+                "actionType",
+                CUSTOM_VALUE
+              );
+
+              if (
+                customText !== undefined
+              ) {
+                updateEvent(
+                  index,
+                  "actionResult",
+                  customText
+                );
+              }
+
+              return;
+            }
+
+            updateEvent(
+              index,
+              "actionType",
+              value
+            );
+
             updateEvent(
               index,
               "actionResult",
-              value
-            )
-          }
+              ""
+            );
+          }}
         />
       </MobileField>
+
+      {event.actionType !== CUSTOM_VALUE && (
+        <MobileField
+          label="Intézkedés / eredmény leírása"
+          last
+        >
+          <AutoResizeTextarea
+            value={
+              event.actionResult || ""
+            }
+            onChange={(eventObject) =>
+              updateEvent(
+                index,
+                "actionResult",
+                eventObject.target.value
+              )
+            }
+            placeholder="Intézkedés / eredmény leírása..."
+            className="
+              border
+              border-[#e1e5eb]
+              bg-[#fafbfc]
+            "
+          />
+        </MobileField>
+      )}
+
+      {event.actionType === CUSTOM_VALUE && (
+        <div className="pb-1" />
+      )}
     </div>
   );
 }
@@ -892,6 +1161,7 @@ function MobileField({
 function EventLogEditor({
   match,
   onBack,
+  onStatusChange,
 }) {
   const [status, setStatus] = useState(
     match.status
@@ -926,9 +1196,9 @@ function EventLogEditor({
      ========================================================== */
 
   const [events, setEvents] = useState(() =>
-    (eventRows || []).map((event) => ({
-      ...event,
-    }))
+    (eventRows || []).map((event) =>
+      normalizeEvent(event)
+    )
   );
 
   /* ==========================================================
@@ -944,14 +1214,27 @@ function EventLogEditor({
     },
   ]);
 
-  const [newNote, setNewNote] = useState("");
+  const [newNote, setNewNote] =
+    useState("");
+
   const [generatedPdfUrl, setGeneratedPdfUrl] =
     useState(null);
 
-  const pdfContentRef = useRef(null);
+  const pdfContentRef =
+    useRef(null);
 
   const [isGeneratingPdf, setIsGeneratingPdf] =
     useState(false);
+
+  /* ==========================================================
+     APP STÁTUSZ SZINKRONIZÁLÁSA
+     ========================================================== */
+
+  useEffect(() => {
+    if (onStatusChange) {
+      onStatusChange(status);
+    }
+  }, [status, onStatusChange]);
 
   /* ==========================================================
      PDF OBJECT URL TAKARÍTÁSA
@@ -1057,6 +1340,9 @@ function EventLogEditor({
             ) ||
             Boolean(
               updatedEvent.eventDescription?.trim()
+            ) ||
+            Boolean(
+              updatedEvent.actionType?.trim()
             ) ||
             Boolean(
               updatedEvent.actionResult?.trim()
@@ -1236,6 +1522,10 @@ function EventLogEditor({
 
       setGeneratedPdfUrl(url);
 
+      /*
+       * Csak sikeres PDF generálás után
+       * válik lezárttá az eseménynapló.
+       */
       setStatus("finalized");
 
       console.log(
@@ -1297,8 +1587,8 @@ function EventLogEditor({
       >
 
         {/* ====================================================
-            PDF DOKUMENTUM
-            ==================================================== */}
+            PDF
+           ==================================================== */}
 
         <div
           className="
@@ -1339,8 +1629,8 @@ function EventLogEditor({
         </div>
 
         {/* ====================================================
-            FINALIZED - MEGJEGYZÉSEK
-            ==================================================== */}
+            LEZÁRT - MEGJEGYZÉSEK + ÚJ MEGJEGYZÉS
+           ==================================================== */}
 
         {isFinalized && (
           <div
@@ -1448,28 +1738,6 @@ function EventLogEditor({
             >
               <button
                 type="button"
-                onClick={onBack}
-                className="
-                  min-h-10
-                  rounded-[7px]
-                  border
-                  border-gray-300
-                  bg-white
-                  px-5
-                  py-2
-                  text-[13px]
-                  font-semibold
-                  text-gray-700
-                  transition
-                  hover:bg-gray-50
-                  max-[600px]:w-full
-                "
-              >
-                Vissza
-              </button>
-
-              <button
-                type="button"
                 onClick={addNote}
                 disabled={!newNote.trim()}
                 className="
@@ -1497,8 +1765,8 @@ function EventLogEditor({
         )}
 
         {/* ====================================================
-            ARCHIVED - CSAK MEGLÉVŐ MEGJEGYZÉSEK
-            ==================================================== */}
+            ARCHIVÁLT - CSAK MEGLÉVŐ MEGJEGYZÉSEK
+           ==================================================== */}
 
         {isArchived &&
           notes.length > 0 && (
@@ -1570,10 +1838,6 @@ function EventLogEditor({
             </div>
           )}
 
-        {/* ====================================================
-            VISSZA
-            ==================================================== */}
-
         <button
           type="button"
           onClick={onBack}
@@ -1593,7 +1857,7 @@ function EventLogEditor({
             max-[600px]:w-full
           "
         >
-          Vissza
+          Vissza1
         </button>
 
       </div>
@@ -1618,8 +1882,8 @@ function EventLogEditor({
     >
 
       {/* ======================================================
-          REJTETT PDF FORRÁS
-          ====================================================== */}
+          PDF GENERÁLÁSHOZ HASZNÁLT REJTETT DOKUMENTUM
+         ====================================================== */}
 
       <div
         ref={pdfContentRef}
@@ -1638,36 +1902,8 @@ function EventLogEditor({
       </div>
 
       {/* ======================================================
-          STÁTUSZ
-          ====================================================== */}
-
-      <div
-        className="
-          mb-4
-          flex
-          items-center
-          gap-2
-          rounded-lg
-          border
-          border-[#C19A5B]
-          bg-[#f8fafc]
-          px-[14px]
-          py-[10px]
-          text-[13px]
-        "
-      >
-        <strong className="font-bold">
-          Állapot:
-        </strong>
-
-        <span className="text-[#596579]">
-          Megnyitott
-        </span>
-      </div>
-
-      {/* ======================================================
-          DOKUMENTUM FEJLÉC
-          ====================================================== */}
+          FEJLÉC
+         ====================================================== */}
 
       <section
         className="
@@ -1696,8 +1932,6 @@ function EventLogEditor({
             max-[1100px]:lg:gap-x-6
           "
         >
-
-          {/* BAL / ELSŐ OSZLOP */}
 
           <div
             className="
@@ -1809,8 +2043,6 @@ function EventLogEditor({
               />
             </HeaderField>
           </div>
-
-          {/* JOBB / MÁSODIK OSZLOP */}
 
           <div
             className="
@@ -2003,8 +2235,6 @@ function EventLogEditor({
           </div>
         </div>
 
-        {/* LOGÓ */}
-
         <div
           className="
             absolute
@@ -2038,8 +2268,8 @@ function EventLogEditor({
       </section>
 
       {/* ======================================================
-          ESEMÉNYNAPLÓ
-          ====================================================== */}
+          ESEMÉNYNAPLÓ SZEKCIÓ
+         ====================================================== */}
 
       <section className="w-full">
 
@@ -2053,20 +2283,9 @@ function EventLogEditor({
           "
         >
           <div>
-            <h2
-              className="
-                m-0
-                text-[18px]
-                font-bold
-                text-gray-800
-              "
-            >
-              Eseménynapló
-            </h2>
-
             <p
               className="
-                mt-1
+                m-0
                 max-w-[900px]
                 text-xs
                 leading-[1.5]
@@ -2094,7 +2313,7 @@ function EventLogEditor({
 
         {/* ====================================================
             DESKTOP TÁBLÁZAT
-            ==================================================== */}
+           ==================================================== */}
 
         <div
           className="
@@ -2205,8 +2424,8 @@ function EventLogEditor({
         </div>
 
         {/* ====================================================
-            MOBILE / TABLET KÁRTYÁK
-            ==================================================== */}
+            MOBILE
+           ==================================================== */}
 
         <div
           className="
@@ -2251,8 +2470,8 @@ function EventLogEditor({
         </div>
 
         {/* ====================================================
-            ESEMÉNY HOZZÁADÁSA
-            ==================================================== */}
+            ÚJ ESEMÉNY
+           ==================================================== */}
 
         <div
           className="
@@ -2304,8 +2523,8 @@ function EventLogEditor({
       </section>
 
       {/* ======================================================
-          ALSÓ GOMBOK
-          ====================================================== */}
+          MENTÉS / VÉGLEGESÍTÉS
+         ====================================================== */}
 
       <div
         className="
@@ -2379,7 +2598,7 @@ function EventLogEditor({
 
       {/* ======================================================
           VISSZA
-          ====================================================== */}
+         ====================================================== */}
 
       <button
         type="button"
@@ -2400,7 +2619,7 @@ function EventLogEditor({
           max-[600px]:w-full
         "
       >
-        Vissza
+        Vissza2
       </button>
 
     </div>
@@ -2408,3 +2627,4 @@ function EventLogEditor({
 }
 
 export default EventLogEditor;
+
