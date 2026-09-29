@@ -9,8 +9,6 @@ import EventLogEditor from "./components/EventLogEditor";
 import ProfilePage from "./components/ProfilePage";
 import AdminPage from "./components/AdminPage";
 
-
-
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("home");
@@ -21,7 +19,18 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
 
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  /*
+   * Az éppen megnyitott eseménynapló aktuális státusza.
+   *
+   * in_progress -> Megnyitott
+   * finalized   -> Lezárt
+   * archived    -> Archivált
+   */
+  const [editorStatus, setEditorStatus] = useState(null);
+
+  const [profileMenuOpen, setProfileMenuOpen] =
+    useState(false);
+
   //const contentRef = useRef();
 
   useEffect(() => {
@@ -71,11 +80,33 @@ function App() {
   }, []);
 
   /*
-   * Aktuális menüpont megnevezése.
-   * Az eseménynapló szerkesztő megnyitásakor is
-   * az eredeti menüpont neve marad látható.
+   * Aktuális menüpont / eseménynapló státusz megnevezése.
+   *
+   * Ha nincs megnyitva eseménynapló:
+   *   az aktuális menüpont neve jelenik meg.
+   *
+   * Ha meg van nyitva eseménynapló:
+   *   in_progress -> Megnyitott
+   *   finalized   -> Lezárt
+   *   archived    -> Archivált
    */
   const getViewTitle = () => {
+    if (selectedLog) {
+      switch (editorStatus) {
+        case "in_progress":
+          return "Megnyitott";
+
+        case "finalized":
+          return "Lezárt";
+
+        case "archived":
+          return "Archivált";
+
+        default:
+          return "Eseménynapló";
+      }
+    }
+
     switch (view) {
       case "home":
         return "Főnézet";
@@ -100,9 +131,12 @@ function App() {
     }
   };
 
-
+  /*
+   * Navigáció főmenüpontok között.
+   */
   const navigateTo = (newView) => {
     setSelectedLog(null);
+    setEditorStatus(null);
     setView(newView);
 
     // Mobilon a menü automatikusan bezáródik.
@@ -114,54 +148,69 @@ function App() {
 
   /*
    * PDF export
-  
-  async function downloadPDF() {
-    if (!contentRef.current) {
-      console.error("PDF content not ready");
-      return;
-    }
+   *
+   * async function downloadPDF() {
+   *   if (!contentRef.current) {
+   *     console.error("PDF content not ready");
+   *     return;
+   *   }
+   *
+   *   const html = contentRef.current.innerHTML;
+   *
+   *   try {
+   *     const res = await fetch(
+   *       "http://localhost:3000/generate-pdf",
+   *       {
+   *         method: "POST",
+   *         headers: {
+   *           "Content-Type": "application/json",
+   *         },
+   *         body: JSON.stringify({ html }),
+   *       }
+   *     );
+   *
+   *     if (!res.ok) {
+   *       throw new Error("PDF generation failed");
+   *     }
+   *
+   *     const blob = await res.blob();
+   *     const url = window.URL.createObjectURL(blob);
+   *
+   *     const a = document.createElement("a");
+   *     a.href = url;
+   *     a.download = "event-log.pdf";
+   *     a.click();
+   *
+   *     window.URL.revokeObjectURL(url);
+   *   } catch (err) {
+   *     console.error(err);
+   *   }
+   * }
+   */
 
-    const html = contentRef.current.innerHTML;
-
-    try {
-      const res = await fetch(
-        "http://localhost:3000/generate-pdf",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ html }),
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error("PDF generation failed");
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "event-log.pdf";
-      a.click();
-
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-*/
   /*
-   * Mérkőzés kiválasztása
+   * Mérkőzés kiválasztása.
    */
   const handleClick = (match) => {
     setSelectedLog(match);
 
+    /*
+     * Az eseménynapló kezdeti státuszát
+     * az adott mérkőzés státuszából vesszük.
+     */
+    setEditorStatus(match.status);
+
     // Mobilon a menü legyen bezárva,
     // amikor megnyitjuk az eseménynaplót.
     setMenuOpen(false);
+  };
+
+  /*
+   * Eseménynapló bezárása.
+   */
+  const handleBackFromEditor = () => {
+    setSelectedLog(null);
+    setEditorStatus(null);
   };
 
   /*
@@ -173,13 +222,15 @@ function App() {
         onLogin={(user) => {
           setCurrentUser(user);
           setView("home");
+          setSelectedLog(null);
+          setEditorStatus(null);
         }}
       />
     );
   }
 
   /*
-   * Mérkőzéstábla
+   * Mérkőzéstábla.
    *
    * Mobilon a táblázat vízszintesen görgethető,
    * így nem törik össze a layout kis képernyőn.
@@ -221,7 +272,7 @@ function App() {
   );
 
   /*
-   * Oldal
+   * Oldal.
    */
   return (
     <div className="min-h-screen flex bg-gray-100 relative">
@@ -413,24 +464,32 @@ function App() {
                 alt="Rába ETO"
               />
 
-              <span className="
-                font-semibold
-                text-2xl
-                sm:text-[42px]
-                truncate
-              ">
+              <span
+                className="
+                  font-semibold
+                  text-2xl
+                  sm:text-[42px]
+                  truncate
+                "
+              >
                 Rába ETO
               </span>
 
             </div>
 
-            {/* PROFIL IKON */}
-            <div className="relative flex-shrink-0">
+        {/* PROFIL IKON + FELHASZNÁLÓNÉV */}
+        <div className="relative flex-shrink-0 flex items-center gap-2">
 
-              <button
-                onClick={() => {
-                  setProfileMenuOpen(!profileMenuOpen);
-                }}
+          <span className="text-sm sm:text-base font-medium text-white">
+            {currentUser?.username || "Username"}
+          </span>
+
+          <button 
+            onClick={() => { 
+              setProfileMenuOpen(
+                !profileMenuOpen
+              ); 
+            }}
                 className="
                   bg-[#C19A5B]
                   p-2
@@ -496,6 +555,8 @@ function App() {
                     onClick={() => {
                       setCurrentUser(null);
                       setView("home");
+                      setSelectedLog(null);
+                      setEditorStatus(null);
                       setProfileMenuOpen(false);
                       setMenuOpen(false);
                     }}
@@ -583,7 +644,8 @@ function App() {
           {selectedLog && (
             <EventLogEditor
               match={selectedLog}
-              onBack={() => setSelectedLog(null)}
+              onBack={handleBackFromEditor}
+              onStatusChange={setEditorStatus}
             />
           )}
 
@@ -591,91 +653,102 @@ function App() {
               PROFIL
               ================================================= */}
 
-          {!selectedLog && view === "profile" && (
-            <ProfilePage />
-          )}
+          {!selectedLog &&
+            view === "profile" && (
+              <ProfilePage />
+            )}
 
           {/* =================================================
               ADMIN FELÜLET
               ================================================= */}
 
-          {!selectedLog && view === "admin" && (
-            <div className="bg-white rounded-2xl shadow p-4 sm:p-6">
+          {!selectedLog &&
+            view === "admin" && (
+              <div className="bg-white rounded-2xl shadow p-4 sm:p-6">
 
-              <h2 className="
-                text-xl
-                sm:text-2xl
-                font-semibold
-                mb-4
-              ">
-                Admin felület
-              </h2>
+                <h2
+                  className="
+                    text-xl
+                    sm:text-2xl
+                    font-semibold
+                    mb-4
+                  "
+                >
+                  Admin felület
+                </h2>
 
-              <AdminPage />
+                <AdminPage />
 
-            </div>
-          )}
+              </div>
+            )}
 
           {/* =================================================
               FŐNÉZET
               ================================================= */}
 
-          {!selectedLog && view === "home" && (
-            <>
+          {!selectedLog &&
+            view === "home" && (
+              <>
 
-              {/* MEGNYITOTT NAPLÓK */}
-              <div>
-                <h2 className="
-                  font-semibold
-                  mb-2
-                  bg-[#C19A5B]
-                  text-black
-                  px-3
-                  py-2
-                  rounded
-                ">
-                  Megnyitott naplók
-                </h2>
+                {/* MEGNYITOTT NAPLÓK */}
+                <div>
+                  <h2
+                    className="
+                      font-semibold
+                      mb-2
+                      bg-[#C19A5B]
+                      text-black
+                      px-3
+                      py-2
+                      rounded
+                    "
+                  >
+                    Megnyitott naplók
+                  </h2>
 
-                {renderTable(matches)}
-              </div>
+                  {renderTable(matches)}
+                </div>
 
-              {/* LEZÁRT NAPLÓK */}
-              <div>
-                <h2 className="
-                  font-semibold
-                  mb-2
-                  bg-[#C19A5B]
-                  text-black
-                  px-3
-                  py-2
-                  rounded
-                ">
-                  Lezárt de nem archivált
-                </h2>
+                {/* LEZÁRT NAPLÓK */}
+                <div>
+                  <h2
+                    className="
+                      font-semibold
+                      mb-2
+                      bg-[#C19A5B]
+                      text-black
+                      px-3
+                      py-2
+                      rounded
+                    "
+                  >
+                    Lezárt de nem archivált
+                  </h2>
 
-                {renderTable(closed)}
-              </div>
+                  {renderTable(closed)}
+                </div>
 
-              {/* KÖVETKEZŐ MÉRKŐZÉSEK */}
-              <div>
-                <h2 className="
-                  font-semibold
-                  mb-2
-                  bg-[#C19A5B]
-                  text-black
-                  px-3
-                  py-2
-                  rounded
-                ">
-                  Következő mérkőzések
-                </h2>
+                {/* KÖVETKEZŐ MÉRKŐZÉSEK */}
+                <div>
+                  <h2
+                    className="
+                      font-semibold
+                      mb-2
+                      bg-[#C19A5B]
+                      text-black
+                      px-3
+                      py-2
+                      rounded
+                    "
+                  >
+                    Következő mérkőzések
+                  </h2>
 
-                {renderTable(matches)}
-              </div>
+                  {renderTable(matches)}
+                </div>
 
-            </>
-          )}
+              </>
+            )}
 
           {/* =================================================
               KÖVETKEZŐ
@@ -700,9 +773,6 @@ function App() {
           {!selectedLog &&
             view === "archived" &&
             renderTable(archived)}
-
-          
-          
 
         </div>
       </div>
