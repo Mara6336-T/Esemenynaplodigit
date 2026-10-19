@@ -1,0 +1,48 @@
+{
+  "matches": [
+    {
+      "id": 100001,
+      "teamId": 323805,
+      "competition": "NB III Nyugat",
+      "homeTeam": "Rába ETO SE Győr",
+      "awayTeam": "FC Example",
+      "date": "2026-10-10",
+      "time": "16:00",
+      "venue": "ETO Park",
+      "status": "scheduled"
+    },
+    {
+      "id": 100002,
+      "teamId": 323805,
+      "competition": "NB III Nyugat",
+      "homeTeam": "Example United",
+      "awayTeam": "Rába ETO SE Győr",
+      "date": "2026-10-17",
+      "time": "15:00",
+      "venue": "Example Stadion",
+      "status": "scheduled"
+    },
+    {
+      "id": 100003,
+      "teamId": 323805,
+      "competition": "NB III Nyugat",
+      "homeTeam": "Rába ETO SE Győr",
+      "awayTeam": "Another FC",
+      "date": "2026-10-24",
+      "time": "17:00",
+      "venue": "ETO Park",
+      "status": "scheduled"
+    },
+        {
+      "id": 100004,
+      "teamId": 323807,
+      "competition": "NB III Nyugat",
+      "homeTeam": "Rába ETO SE Győr",
+      "awayTeam": "Another FC",
+      "date": "2026-10-24",
+      "time": "17:00",
+      "venue": "ETO Park",
+      "status": "scheduled"
+    }
+  ]
+}
