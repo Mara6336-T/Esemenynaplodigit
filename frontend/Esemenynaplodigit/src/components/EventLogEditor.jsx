@@ -1160,11 +1160,12 @@ function MobileField({
 
 function EventLogEditor({
   match,
+  eventLogStatus = "in_progress",
   onBack,
   onStatusChange,
 }) {
   const [status, setStatus] = useState(
-    match.status
+    eventLogStatus
   );
 
   /* ==========================================================
@@ -1231,7 +1232,7 @@ function EventLogEditor({
      ========================================================== */
 
   useEffect(() => {
-    if (onStatusChange) {
+    if (typeof onStatusChange === "function") {
       onStatusChange(status);
     }
   }, [status, onStatusChange]);
